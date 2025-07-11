@@ -4,12 +4,14 @@ class CustomTextField extends StatelessWidget {
   final String hintText;
   final bool obscureText;
   final TextEditingController controller;
+  final Widget? suffixIcon;
 
   const CustomTextField({
     super.key,
     required this.hintText,
     this.obscureText = false,
     required this.controller,
+    this.suffixIcon,
   });
 
   @override
@@ -26,6 +28,7 @@ class CustomTextField extends StatelessWidget {
           borderSide: BorderSide.none,
         ),
         hintStyle: TextStyle(color: Colors.blueGrey.shade400),
+        suffixIcon: suffixIcon,
       ),
     );
   }

@@ -1,6 +1,7 @@
+import 'package:doorbot_fyp/viewmodels/auth_view_model.dart';
+import 'package:doorbot_fyp/views/sign_up_view.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../viewmodels/login_viewmodel.dart';
 import '../widgets/custom_button.dart';
 import '../widgets/custom_textfield.dart';
 
@@ -19,6 +20,8 @@ class _LoginViewState extends State<LoginView>
 
   final emailController = TextEditingController();
   final passwordController = TextEditingController();
+
+  bool obscurePassword = true;
 
   @override
   void initState() {
@@ -53,7 +56,7 @@ class _LoginViewState extends State<LoginView>
 
   @override
   Widget build(BuildContext context) {
-    final vm = Provider.of<LoginViewModel>(context);
+    final vm = Provider.of<AuthViewModel>(context);
 
     return Scaffold(
       body: SafeArea(
@@ -66,16 +69,6 @@ class _LoginViewState extends State<LoginView>
               child: SingleChildScrollView(
                 child: Column(
                   children: [
-                    Align(
-                      alignment: Alignment.centerLeft,
-                      child: IconButton(
-                        icon: Icon(Icons.close),
-                        onPressed: () {
-                          Navigator.pop(context);
-                        },
-                      ),
-                    ),
-                    SizedBox(height: 20),
                     Text(
                       'Welcome back',
                       style: TextStyle(
@@ -147,15 +140,27 @@ class _LoginViewState extends State<LoginView>
                     SizedBox(height: 16),
                     CustomTextField(
                       hintText: 'Password',
-                      obscureText: true,
+                      obscureText: obscurePassword,
                       controller: passwordController,
+                      suffixIcon: IconButton(
+                        icon: Icon(
+                          obscurePassword
+                              ? Icons.visibility_off
+                              : Icons.visibility,
+                        ),
+                        onPressed: () {
+                          setState(() {
+                            obscurePassword = !obscurePassword;
+                          });
+                        },
+                      ),
                     ),
                     SizedBox(height: 12),
                     Align(
                       alignment: Alignment.centerRight,
                       child: TextButton(
                         onPressed: () {
-                          // Navigate to forgot password
+                          // Implement forgot password flow
                         },
                         child: Text(
                           'Forgot password?',
@@ -182,7 +187,12 @@ class _LoginViewState extends State<LoginView>
                         Text("Don't have an account?"),
                         TextButton(
                           onPressed: () {
-                            // Navigate to Sign Up
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => SignUpView(),
+                              ),
+                            );
                           },
                           child: Text(
                             'Sign up',
