@@ -1,11 +1,16 @@
 import 'package:doorbot_fyp/viewmodels/auth_view_model.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../widgets/custom_textfield.dart';
 import '../widgets/custom_button.dart';
 
 class SignUpView extends StatefulWidget {
-  const SignUpView({super.key});
+  final void Function(String message)? onSignUpComplete;
+
+  const SignUpView({
+    super.key,
+    this.onSignUpComplete,
+  });
 
   @override
   State<SignUpView> createState() => _SignUpViewState();
@@ -17,6 +22,9 @@ class _SignUpViewState extends State<SignUpView>
   late Animation<double> _fadeAnimation;
   late Animation<Offset> _slideAnimation;
 
+  final _formKey = GlobalKey<FormState>();
+
+  final nameController = TextEditingController();
   final emailController = TextEditingController();
   final passwordController = TextEditingController();
   final confirmPasswordController = TextEditingController();
@@ -30,7 +38,7 @@ class _SignUpViewState extends State<SignUpView>
 
     _controller = AnimationController(
       vsync: this,
-      duration: Duration(milliseconds: 800),
+      duration: const Duration(milliseconds: 800),
     );
 
     _fadeAnimation = Tween<double>(begin: 0, end: 1).animate(
@@ -38,7 +46,7 @@ class _SignUpViewState extends State<SignUpView>
     );
 
     _slideAnimation = Tween<Offset>(
-      begin: Offset(0, 0.3),
+      begin: const Offset(0, 0.3),
       end: Offset.zero,
     ).animate(
       CurvedAnimation(parent: _controller, curve: Curves.easeOut),
@@ -50,6 +58,7 @@ class _SignUpViewState extends State<SignUpView>
   @override
   void dispose() {
     _controller.dispose();
+    nameController.dispose();
     emailController.dispose();
     passwordController.dispose();
     confirmPasswordController.dispose();
@@ -69,154 +78,275 @@ class _SignUpViewState extends State<SignUpView>
             child: Padding(
               padding: const EdgeInsets.all(24.0),
               child: SingleChildScrollView(
-                child: Column(
-                  children: [
-                    Align(
-                      alignment: Alignment.centerLeft,
-                      child: IconButton(
-                        icon: Icon(Icons.arrow_back),
-                        onPressed: () {
-                          Navigator.pop(context);
-                        },
-                      ),
-                    ),
-                    SizedBox(height: 20),
-                    Text(
-                      'Sign up',
-                      style: TextStyle(
-                        fontSize: 28,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    SizedBox(height: 32),
-                    CustomTextField(
-                      hintText: 'Email',
-                      controller: emailController,
-                    ),
-                    SizedBox(height: 16),
-                    CustomTextField(
-                      hintText: 'Password',
-                      obscureText: obscurePassword,
-                      controller: passwordController,
-                      suffixIcon: IconButton(
-                        icon: Icon(
-                          obscurePassword
-                              ? Icons.visibility_off
-                              : Icons.visibility,
-                        ),
-                        onPressed: () {
-                          setState(() {
-                            obscurePassword = !obscurePassword;
-                          });
-                        },
-                      ),
-                    ),
-                    SizedBox(height: 16),
-                    CustomTextField(
-                      hintText: 'Confirm Password',
-                      obscureText: obscureConfirmPassword,
-                      controller: confirmPasswordController,
-                      suffixIcon: IconButton(
-                        icon: Icon(
-                          obscureConfirmPassword
-                              ? Icons.visibility_off
-                              : Icons.visibility,
-                        ),
-                        onPressed: () {
-                          setState(() {
-                            obscureConfirmPassword = !obscureConfirmPassword;
-                          });
-                        },
-                      ),
-                    ),
-                    SizedBox(height: 24),
-                    vm.isLoading
-                        ? CircularProgressIndicator()
-                        : CustomButton(
-                            text: 'Sign up',
-                            onPressed: () {
-                              if (passwordController.text !=
-                                  confirmPasswordController.text) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(
-                                    content: Text(
-                                      'Passwords do not match!',
-                                    ),
-                                  ),
-                                );
-                              } else {
-                                vm.signUpWithEmail(
-                                  emailController.text,
-                                  passwordController.text,
-                                );
-                              }
-                            },
-                          ),
-                    SizedBox(height: 20),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Divider(
-                            color: Colors.blueGrey.shade200,
-                            thickness: 1,
-                          ),
-                        ),
-                        Padding(
-                          padding: EdgeInsets.symmetric(horizontal: 8),
-                          child: Text(
-                            'Or continue with',
-                            style: TextStyle(color: Colors.blueGrey),
-                          ),
-                        ),
-                        Expanded(
-                          child: Divider(
-                            color: Colors.blueGrey.shade200,
-                            thickness: 1,
-                          ),
-                        ),
-                      ],
-                    ),
-                    SizedBox(height: 20),
-                    ElevatedButton.icon(
-                      onPressed: () => vm.loginWithGoogle(),
-                      icon: Image.asset(
-                        'assets/google_icon.png',
-                        height: 24,
-                      ),
-                      label: Text(
-                        'Continue with Google',
-                        style: TextStyle(
-                          color: Colors.black87,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                      style: ElevatedButton.styleFrom(
-                        elevation: 0,
-                        minimumSize: Size(double.infinity, 50),
-                        backgroundColor: Colors.blueGrey.shade50,
-                        side: BorderSide(color: Colors.blueGrey.shade100),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                      ),
-                    ),
-                    SizedBox(height: 30),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Text("Already have an account?"),
-                        TextButton(
+                child: Form(
+                  key: _formKey,
+                  child: Column(
+                    children: [
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: IconButton(
+                          icon: const Icon(Icons.arrow_back),
                           onPressed: () {
                             Navigator.pop(context);
                           },
-                          child: Text(
-                            'Sign in',
-                            style: TextStyle(color: Colors.blue),
+                        ),
+                      ),
+                      const SizedBox(height: 20),
+                      const Text(
+                        'Sign up',
+                        style: TextStyle(
+                          fontSize: 28,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 32),
+
+                      // Name
+                      TextFormField(
+                        controller: nameController,
+                        decoration: const InputDecoration(
+                          labelText: 'Full Name',
+                          border: OutlineInputBorder(),
+                        ),
+                        validator: (value) {
+                          if (value == null || value.trim().isEmpty) {
+                            return 'Please enter your name.';
+                          }
+                          return null;
+                        },
+                      ),
+                      const SizedBox(height: 16),
+
+                      // Email
+                      TextFormField(
+                        controller: emailController,
+                        decoration: const InputDecoration(
+                          labelText: 'Email',
+                          border: OutlineInputBorder(),
+                        ),
+                        keyboardType: TextInputType.emailAddress,
+                        validator: (value) {
+                          if (value == null || value.trim().isEmpty) {
+                            return 'Please enter your email.';
+                          }
+                          if (!RegExp(
+                                  r"^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$")
+                              .hasMatch(value.trim())) {
+                            return 'Please enter a valid email address.';
+                          }
+                          return null;
+                        },
+                      ),
+                      const SizedBox(height: 16),
+
+                      // Password
+                      TextFormField(
+                        controller: passwordController,
+                        obscureText: obscurePassword,
+                        decoration: InputDecoration(
+                          labelText: 'Password',
+                          border: const OutlineInputBorder(),
+                          suffixIcon: IconButton(
+                            icon: Icon(
+                              obscurePassword
+                                  ? Icons.visibility_off
+                                  : Icons.visibility,
+                            ),
+                            onPressed: () {
+                              setState(() {
+                                obscurePassword = !obscurePassword;
+                              });
+                            },
                           ),
-                        )
-                      ],
-                    )
-                  ],
+                        ),
+                        validator: (value) {
+                          if (value == null || value.isEmpty) {
+                            return 'Please enter a password.';
+                          }
+                          if (value.length < 6) {
+                            return 'Password must be at least 6 characters.';
+                          }
+                          return null;
+                        },
+                      ),
+                      const SizedBox(height: 16),
+
+                      // Confirm Password
+                      TextFormField(
+                        controller: confirmPasswordController,
+                        obscureText: obscureConfirmPassword,
+                        decoration: InputDecoration(
+                          labelText: 'Confirm Password',
+                          border: const OutlineInputBorder(),
+                          suffixIcon: IconButton(
+                            icon: Icon(
+                              obscureConfirmPassword
+                                  ? Icons.visibility_off
+                                  : Icons.visibility,
+                            ),
+                            onPressed: () {
+                              setState(() {
+                                obscureConfirmPassword =
+                                    !obscureConfirmPassword;
+                              });
+                            },
+                          ),
+                        ),
+                        validator: (value) {
+                          if (value == null || value.isEmpty) {
+                            return 'Please confirm your password.';
+                          }
+                          if (value != passwordController.text) {
+                            return 'Passwords do not match.';
+                          }
+                          return null;
+                        },
+                      ),
+                      const SizedBox(height: 24),
+
+                      vm.isLoading
+                          ? const CircularProgressIndicator()
+                          : CustomButton(
+                              text: 'Sign up',
+                              onPressed: () async {
+                                if (_formKey.currentState!.validate()) {
+                                  try {
+                                    await vm.signUpWithEmail(
+                                      emailController.text.trim(),
+                                      passwordController.text,
+                                      nameController.text.trim(),
+                                    );
+
+                                    if (context.mounted) {
+                                      final message =
+                                          'Account created! Please verify your email before logging in.';
+
+                                      if (widget.onSignUpComplete != null) {
+                                        widget.onSignUpComplete!(message);
+                                      } else {
+                                        ScaffoldMessenger.of(context)
+                                            .showSnackBar(
+                                          SnackBar(content: Text(message)),
+                                        );
+                                        Navigator.of(context).pop();
+                                      }
+                                    }
+                                  } on FirebaseAuthException catch (e) {
+                                    String message;
+                                    if (e.code == 'email-already-in-use') {
+                                      message =
+                                          "This email is already in use. Please try signing in.";
+                                    } else if (e.code == 'invalid-email') {
+                                      message =
+                                          "The email you entered is not valid.";
+                                    } else if (e.code == 'weak-password') {
+                                      message =
+                                          "Your password is too weak. Please choose a stronger one.";
+                                    } else {
+                                      message =
+                                          "Sorry for the inconvenience. ${e.message}";
+                                    }
+
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(content: Text(message)),
+                                    );
+                                  } catch (e) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(
+                                        content: Text(
+                                          'Sign up failed. Sorry for the inconvenience.',
+                                        ),
+                                      ),
+                                    );
+                                  }
+                                }
+                              },
+                            ),
+
+                      const SizedBox(height: 20),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Divider(
+                              color: Colors.blueGrey.shade200,
+                              thickness: 1,
+                            ),
+                          ),
+                          const Padding(
+                            padding: EdgeInsets.symmetric(horizontal: 8),
+                            child: Text(
+                              'Or continue with',
+                              style: TextStyle(color: Colors.blueGrey),
+                            ),
+                          ),
+                          Expanded(
+                            child: Divider(
+                              color: Colors.blueGrey.shade200,
+                              thickness: 1,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 20),
+
+                      ElevatedButton.icon(
+                        onPressed: () async {
+                          try {
+                            await vm.loginWithGoogle();
+                            if (context.mounted) {
+                              Navigator.of(context)
+                                  .pushReplacementNamed('/home');
+                            }
+                          } catch (e) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text(
+                                  'Google sign in failed. Sorry for the inconvenience.',
+                                ),
+                              ),
+                            );
+                          }
+                        },
+                        icon: Image.asset(
+                          'assets/google_icon.png',
+                          height: 24,
+                        ),
+                        label: const Text(
+                          'Continue with Google',
+                          style: TextStyle(
+                            color: Colors.black87,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                        style: ElevatedButton.styleFrom(
+                          elevation: 0,
+                          minimumSize: const Size(double.infinity, 50),
+                          backgroundColor: Colors.blueGrey.shade50,
+                          side: BorderSide(color: Colors.blueGrey.shade100),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                        ),
+                      ),
+
+                      const SizedBox(height: 30),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const Text("Already have an account?"),
+                          TextButton(
+                            onPressed: () {
+                              Navigator.pop(context);
+                            },
+                            child: const Text(
+                              'Sign in',
+                              style: TextStyle(color: Colors.blue),
+                            ),
+                          )
+                        ],
+                      )
+                    ],
+                  ),
                 ),
               ),
             ),

@@ -6,63 +6,90 @@ class AuthViewModel extends ChangeNotifier {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final GoogleSignIn _googleSignIn = GoogleSignIn();
 
-  bool isLoading = false;
+  bool _isLoading = false;
+  bool get isLoading => _isLoading;
+
+  void setLoading(bool value) {
+    _isLoading = value;
+    notifyListeners();
+  }
+
+  User? get currentUser => _auth.currentUser;
+
+  String get displayName {
+    if (_auth.currentUser?.displayName != null &&
+        _auth.currentUser!.displayName!.isNotEmpty) {
+      return _auth.currentUser!.displayName!;
+    }
+    return "Guest User";
+  }
+
+  String get email {
+    return _auth.currentUser?.email ?? "No email";
+  }
 
   Future<void> loginWithEmail(String email, String password) async {
     try {
-      isLoading = true;
-      notifyListeners();
+      setLoading(true);
 
-      await _auth.signInWithEmailAndPassword(
+      final UserCredential userCredential =
+          await _auth.signInWithEmailAndPassword(
         email: email,
         password: password,
       );
 
-      // handle successful login (e.g. navigate, show success message)
+      if (!(userCredential.user?.emailVerified ?? false)) {
+        await _auth.signOut();
+        throw FirebaseAuthException(
+          code: "email-not-verified",
+          message:
+              "Your email is not verified yet. Please check your inbox or spam folder.",
+        );
+      }
     } on FirebaseAuthException catch (e) {
       debugPrint('FirebaseAuthException during login: ${e.code} ${e.message}');
-      // Show a user-friendly error message
+      rethrow;
     } catch (e) {
       debugPrint('Unexpected error during login: $e');
+      throw Exception("Something went wrong. Please try again.");
     } finally {
-      isLoading = false;
-      notifyListeners();
+      setLoading(false);
     }
   }
 
-  Future<void> signUpWithEmail(String email, String password) async {
+  Future<void> signUpWithEmail(
+      String email, String password, String name) async {
     try {
-      isLoading = true;
-      notifyListeners();
+      setLoading(true);
 
-      await _auth.createUserWithEmailAndPassword(
+      UserCredential result = await _auth.createUserWithEmailAndPassword(
         email: email,
         password: password,
       );
 
-      // handle successful sign up
+      await result.user?.updateDisplayName(name);
+      await result.user?.reload();
+
+      await result.user?.sendEmailVerification();
     } on FirebaseAuthException catch (e) {
-      debugPrint('FirebaseAuthException during sign up: ${e.code} ${e.message}');
-      // Show user-friendly error message
+      debugPrint('FirebaseAuthException during signup: ${e.code} ${e.message}');
+      rethrow;
     } catch (e) {
-      debugPrint('Unexpected error during sign up: $e');
+      debugPrint('Unexpected error during signup: $e');
+      throw Exception("Something went wrong. Please try again.");
     } finally {
-      isLoading = false;
-      notifyListeners();
+      setLoading(false);
     }
   }
 
   Future<void> loginWithGoogle() async {
     try {
-      isLoading = true;
-      notifyListeners();
+      setLoading(true);
 
       final GoogleSignInAccount? googleUser = await _googleSignIn.signIn();
 
       if (googleUser == null) {
         debugPrint("Google Sign-In cancelled by user.");
-        isLoading = false;
-        notifyListeners();
         return;
       }
 
@@ -76,14 +103,46 @@ class AuthViewModel extends ChangeNotifier {
 
       await _auth.signInWithCredential(credential);
 
-      // handle successful login (navigate, show message, etc.)
+      // Google users are always considered verified
     } on FirebaseAuthException catch (e) {
-      debugPrint('FirebaseAuthException during Google Sign-In: ${e.code} ${e.message}');
+      debugPrint(
+          'FirebaseAuthException during Google Sign-In: ${e.code} ${e.message}');
+      rethrow;
     } on Exception catch (e) {
       debugPrint('General exception during Google Sign-In: $e');
+      throw Exception("Something went wrong during Google Sign-In.");
     } finally {
-      isLoading = false;
-      notifyListeners();
+      setLoading(false);
     }
+  }
+
+  Future<void> resendVerificationEmail(String email) async {
+    try {
+      if (_auth.currentUser != null && !_auth.currentUser!.emailVerified) {
+        await _auth.currentUser?.sendEmailVerification();
+      }
+    } catch (e) {
+      debugPrint('Error sending verification email: $e');
+      throw Exception("Failed to send verification email. Please try again.");
+    }
+  }
+
+  Future<void> logout() async {
+    await _googleSignIn.signOut();
+    await _auth.signOut();
+  }
+
+  Future<void> resetPassword(String email) async {
+    try {
+      await _auth.sendPasswordResetEmail(email: email);
+    } catch (e) {
+      debugPrint('Error sending password reset email: $e');
+      throw Exception("Failed to send password reset email.");
+    }
+  }
+
+  @override
+  void dispose() {
+    super.dispose();
   }
 }
