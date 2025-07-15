@@ -1,5 +1,6 @@
 import 'package:doorbot_fyp/viewmodels/auth_view_model.dart';
 import 'package:doorbot_fyp/views/forgot_password_view.dart';
+import 'package:doorbot_fyp/views/home_view.dart';
 import 'package:doorbot_fyp/views/sign_up_view.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -34,19 +35,18 @@ class _LoginViewState extends State<LoginView>
 
     _controller = AnimationController(
       vsync: this,
-      duration: Duration(milliseconds: 800),
+      duration: const Duration(milliseconds: 800),
     );
 
-    _fadeAnimation = Tween<double>(begin: 0, end: 1).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeIn),
-    );
+    _fadeAnimation = Tween<double>(
+      begin: 0,
+      end: 1,
+    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeIn));
 
     _slideAnimation = Tween<Offset>(
-      begin: Offset(0, 0.3),
+      begin: const Offset(0, 0.3),
       end: Offset.zero,
-    ).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeOut),
-    );
+    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOut));
 
     _controller.forward();
 
@@ -71,37 +71,42 @@ class _LoginViewState extends State<LoginView>
     showDialog(
       context: context,
       builder: (_) => AlertDialog(
-        title: Text('Email Not Verified'),
-        content: Text(
+        title: const Text('Email Not Verified'),
+        content: const Text(
           'It looks like your email address hasn\'t been verified yet. '
           'Would you like us to resend the verification email?',
         ),
         actions: [
           TextButton(
-            child: Text('Cancel'),
+            child: const Text('Cancel'),
             onPressed: () => Navigator.pop(context),
           ),
           ElevatedButton(
-            child: Text('Resend Email'),
+            child: const Text('Resend Email'),
             onPressed: () async {
               Navigator.pop(context);
               try {
                 await Provider.of<AuthViewModel>(
                   context,
                   listen: false,
-                ).resendVerificationEmail(email);
+                ).resendVerificationEmail(
+                  email,
+                  passwordController.text.trim(),
+                );
 
                 ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
+                  const SnackBar(
                     content: Text(
-                        'Verification email sent. Please check your inbox.'),
+                      'Verification email sent. Please check your inbox or spam folder.',
+                    ),
                   ),
                 );
               } catch (e) {
                 ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
+                  const SnackBar(
                     content: Text(
-                        'Failed to resend verification email. Please try again.'),
+                      'Failed to resend verification email. Please try again.',
+                    ),
                   ),
                 );
               }
@@ -112,60 +117,66 @@ class _LoginViewState extends State<LoginView>
     );
   }
 
-  Future<void> _handleLogin(AuthViewModel vm) async {
-    if (_formKey.currentState?.validate() ?? false) {
-      final email = emailController.text.trim();
-      final password = passwordController.text.trim();
+Future<void> _handleLogin(AuthViewModel vm) async {
+  if (_formKey.currentState?.validate() ?? false) {
+    final email = emailController.text.trim();
+    final password = passwordController.text.trim();
 
-      try {
-        await vm.loginWithEmail(email, password);
-        if (context.mounted) {
-          Navigator.of(context).pushReplacementNamed('/home');
-        }
-      } on FirebaseAuthException catch (e) {
-        String message = 'Sorry, we couldn\'t log you in. Please try again.';
+    try {
+      await vm.loginWithEmail(email, password);
+      if (!context.mounted) return;
 
-        if (e.code == 'user-not-found') {
-          message = 'No account found for this email.';
-        } else if (e.code == 'wrong-password') {
-          message = 'Incorrect password. Please try again.';
-        } else if (e.code == 'user-disabled') {
-          message = 'Your account has been disabled.';
-        } else if (e.code == 'invalid-email') {
-          message = 'The email address is badly formatted.';
-        } else if (e.code == 'user-not-verified') {
-          message =
-              'Your email is not verified. Please verify it to log in.';
-          _showResendVerificationDialog(email);
-        }
-
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(message)),
-        );
-      } catch (e) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-                'Sorry, something went wrong while logging in. Please try again.'),
-          ),
-        );
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(builder: (context) => const HomeView()),
+      );
+    } on FirebaseAuthException catch (e) {
+      if (e.code == 'email-not-verified') {
+        _showResendVerificationDialog(email);
+        return;
       }
+
+      String message = 'Something went wrong. Please try again.';
+      if (e.code == 'user-not-found') {
+        message = 'No account found for this email. Please sign up first.';
+      } else if (e.code == 'wrong-password') {
+        message = 'Incorrect password. Please try again.';
+      } else if (e.code == 'user-disabled') {
+        message = 'Your account has been disabled.';
+      } else if (e.code == 'invalid-email') {
+        message = 'The email address is badly formatted.';
+      } else if (e.code == 'invalid-credential') {
+        message = 'invalid credentials.';
+      } else if (e.message != null) {
+        message = e.message!;
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(message)),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Sorry, something went wrong while logging in. Please try again.',
+          ),
+        ),
+      );
     }
   }
+}
+
 
   Future<void> _handleGoogleLogin(AuthViewModel vm) async {
     try {
       vm.setLoading(true);
       await vm.loginWithGoogle();
-
       if (context.mounted) {
-        Navigator.of(context).pushReplacementNamed('/home');
+        Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (context) => const HomeView()));
       }
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content:
-              Text('Google sign in failed. Please try again later.'),
+        const SnackBar(
+          content: Text('Google sign in failed. Please try again later.'),
         ),
       );
     } finally {
@@ -188,31 +199,23 @@ class _LoginViewState extends State<LoginView>
               child: SingleChildScrollView(
                 child: Column(
                   children: [
-                    Text(
+                    const Text(
                       'Welcome back',
                       style: TextStyle(
                         fontSize: 28,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
-                    SizedBox(height: 8),
-                    Text(
+                    const SizedBox(height: 8),
+                    const Text(
                       'Log in to continue',
-                      style: TextStyle(
-                        color: Colors.blueGrey,
-                        fontSize: 16,
-                      ),
+                      style: TextStyle(color: Colors.blueGrey, fontSize: 16),
                     ),
-                    SizedBox(height: 32),
+                    const SizedBox(height: 32),
                     ElevatedButton.icon(
-                      onPressed: vm.isLoading
-                          ? null
-                          : () => _handleGoogleLogin(vm),
-                      icon: Image.asset(
-                        'assets/google_icon.png',
-                        height: 24,
-                      ),
-                      label: Text(
+                      onPressed: () => _handleGoogleLogin(vm),
+                      icon: Image.asset('assets/google_icon.png', height: 24),
+                      label: const Text(
                         'Continue with Google',
                         style: TextStyle(
                           color: Colors.black87,
@@ -221,15 +224,15 @@ class _LoginViewState extends State<LoginView>
                       ),
                       style: ElevatedButton.styleFrom(
                         elevation: 0,
-                        minimumSize: Size(double.infinity, 50),
-                        backgroundColor: Colors.white,
+                        minimumSize: const Size(double.infinity, 50),
+                        backgroundColor: Colors.blueGrey.shade50,
                         side: BorderSide(color: Colors.blueGrey.shade100),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(10),
                         ),
                       ),
                     ),
-                    SizedBox(height: 20),
+                    const SizedBox(height: 20),
                     Row(
                       children: [
                         Expanded(
@@ -238,10 +241,10 @@ class _LoginViewState extends State<LoginView>
                             thickness: 1,
                           ),
                         ),
-                        Padding(
+                        const Padding(
                           padding: EdgeInsets.symmetric(horizontal: 8),
                           child: Text(
-                            'OR',
+                            'Or continue with',
                             style: TextStyle(color: Colors.blueGrey),
                           ),
                         ),
@@ -253,7 +256,7 @@ class _LoginViewState extends State<LoginView>
                         ),
                       ],
                     ),
-                    SizedBox(height: 20),
+                    const SizedBox(height: 20),
                     Form(
                       key: _formKey,
                       child: Column(
@@ -261,28 +264,30 @@ class _LoginViewState extends State<LoginView>
                           TextFormField(
                             controller: emailController,
                             keyboardType: TextInputType.emailAddress,
-                            decoration: InputDecoration(
+                            decoration: const InputDecoration(
                               labelText: 'Email',
                               border: OutlineInputBorder(),
                             ),
                             validator: (value) {
                               if (value == null || value.trim().isEmpty) {
-                                return 'Please enter your email';
+                                return 'Please enter your email.';
                               }
-                              if (!value.contains('@')) {
-                                return 'Please enter a valid email';
+                              if (!RegExp(
+                                      r"^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$")
+                                  .hasMatch(value.trim())) {
+                                return 'Please enter a valid email address.';
                               }
                               return null;
                             },
                           ),
-                          SizedBox(height: 16),
+                          const SizedBox(height: 16),
                           TextFormField(
                             controller: passwordController,
                             obscureText: obscurePassword,
                             textInputAction: TextInputAction.done,
                             decoration: InputDecoration(
                               labelText: 'Password',
-                              border: OutlineInputBorder(),
+                              border: const OutlineInputBorder(),
                               suffixIcon: IconButton(
                                 icon: Icon(
                                   obscurePassword
@@ -298,10 +303,10 @@ class _LoginViewState extends State<LoginView>
                             ),
                             validator: (value) {
                               if (value == null || value.isEmpty) {
-                                return 'Please enter your password';
+                                return 'Please enter your password.';
                               }
                               if (value.length < 6) {
-                                return 'Password must be at least 6 characters';
+                                return 'Password must be at least 6 characters.';
                               }
                               return null;
                             },
@@ -309,7 +314,7 @@ class _LoginViewState extends State<LoginView>
                         ],
                       ),
                     ),
-                    SizedBox(height: 12),
+                    const SizedBox(height: 12),
                     Align(
                       alignment: Alignment.centerRight,
                       child: TextButton(
@@ -321,52 +326,40 @@ class _LoginViewState extends State<LoginView>
                             ),
                           );
                         },
-                        child: Text(
+                        child: const Text(
                           'Forgot password?',
-                          style: TextStyle(
-                            color: Colors.blue,
-                          ),
+                          style: TextStyle(color: Colors.blue),
                         ),
                       ),
                     ),
-                    SizedBox(height: 20),
+                    const SizedBox(height: 20),
                     vm.isLoading
-                        ? CircularProgressIndicator()
+                        ? const CircularProgressIndicator()
                         : CustomButton(
                             text: 'Log in',
                             onPressed: () => _handleLogin(vm),
                           ),
-                    SizedBox(height: 20),
+                    const SizedBox(height: 20),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Text("Don't have an account?"),
+                        const Text("Don't have an account?"),
                         TextButton(
                           onPressed: () {
                             Navigator.push(
                               context,
                               MaterialPageRoute(
-                                builder: (_) => SignUpView(
-                                  onSignUpComplete: (message) {
-                                    Navigator.of(context).pushReplacement(
-                                      MaterialPageRoute(
-                                        builder: (_) => LoginView(
-                                          successMessage: message,
-                                        ),
-                                      ),
-                                    );
-                                  },
-                                ),
+                                builder: (_) => SignUpView(),
                               ),
                             );
                           },
-                          child: Text(
+                          child: const Text(
                             'Sign up',
                             style: TextStyle(color: Colors.blue),
                           ),
-                        )
+                        ),
                       ],
-                    )
+                    ),
                   ],
                 ),
               ),

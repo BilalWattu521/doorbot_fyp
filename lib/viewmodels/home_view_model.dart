@@ -1,9 +1,9 @@
-// lib/viewmodels/home_view_model.dart
 import 'package:flutter/material.dart';
 
 class HomeViewModel extends ChangeNotifier {
   bool microphoneOn = false;
   bool speakerOn = false;
+  bool notificationsOn = true;
 
   void toggleMicrophone() {
     microphoneOn = !microphoneOn;
@@ -12,6 +12,11 @@ class HomeViewModel extends ChangeNotifier {
 
   void toggleSpeaker() {
     speakerOn = !speakerOn;
+    notifyListeners();
+  }
+
+  void toggleNotifications() {
+    notificationsOn = !notificationsOn;
     notifyListeners();
   }
 }

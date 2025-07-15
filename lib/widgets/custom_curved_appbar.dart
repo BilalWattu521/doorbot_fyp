@@ -1,11 +1,15 @@
-
 import 'package:flutter/material.dart';
 import 'custom_appbar_clipper.dart';
 
 class CustomCurvedAppBar extends StatelessWidget implements PreferredSizeWidget {
   final String title;
+  final Widget? leading; // ← Add this
 
-  const CustomCurvedAppBar({super.key, required this.title});
+  const CustomCurvedAppBar({
+    super.key,
+    required this.title,
+    this.leading, // ← Add this
+  });
 
   @override
   Size get preferredSize => Size.fromHeight(150);
@@ -33,12 +37,13 @@ class CustomCurvedAppBar extends StatelessWidget implements PreferredSizeWidget 
         Positioned(
           left: 10,
           top: 40,
-          child: IconButton(
-            icon: Icon(Icons.menu, color: Colors.white),
-            onPressed: () {
-              Scaffold.of(context).openDrawer();
-            },
-          ),
+          child: leading ??
+              IconButton( // ← Use `leading` if provided
+                icon: Icon(Icons.menu, color: Colors.white),
+                onPressed: () {
+                  Scaffold.of(context).openDrawer();
+                },
+              ),
         ),
         Positioned.fill(
           top: 40,

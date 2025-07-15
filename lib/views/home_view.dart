@@ -1,6 +1,9 @@
-// lib/views/home_view.dart
+import 'package:doorbot_fyp/views/history_view.dart';
+import 'package:doorbot_fyp/views/login_view.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:adaptive_theme/adaptive_theme.dart';
+
 import '../viewmodels/home_view_model.dart';
 import '../viewmodels/auth_view_model.dart';
 import '../widgets/custom_curved_appbar.dart';
@@ -46,20 +49,36 @@ class HomeView extends StatelessWidget {
                     leading: Icon(Icons.history, color: Colors.blueAccent),
                     title: Text("History"),
                     onTap: () {
-                      // Navigate to history
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (context) => HistoryView()),
+                      );
                     },
                   ),
                   SwitchListTile(
                     secondary: Icon(Icons.notifications, color: Colors.blueAccent),
                     title: Text("Notifications"),
-                    value: true,
-                    onChanged: (val) {},
+                    value: homeVM.notificationsOn,
+                    onChanged: (val) {
+                      homeVM.toggleNotifications();
+                    },
                   ),
-                  SwitchListTile(
-                    secondary: Icon(Icons.nightlight_round, color: Colors.blueAccent),
-                    title: Text("Dark Theme"),
-                    value: false,
-                    onChanged: (val) {},
+                  Builder(
+                    builder: (context) {
+                      final isDark = AdaptiveTheme.of(context)?.mode == AdaptiveThemeMode.dark;
+                      return SwitchListTile(
+                        secondary: Icon(Icons.nightlight_round, color: Colors.blueAccent),
+                        title: Text("Dark Theme"),
+                        value: isDark ?? false,
+                        onChanged: (val) {
+                          if (val) {
+                            AdaptiveTheme.of(context)?.setDark();
+                          } else {
+                            AdaptiveTheme.of(context)?.setLight();
+                          }
+                        },
+                      );
+                    },
                   ),
                   Spacer(),
                   ListTile(
@@ -70,7 +89,9 @@ class HomeView extends StatelessWidget {
                     ),
                     onTap: () async {
                       await authVM.logout();
-                      Navigator.of(context).pushReplacementNamed("/login");
+                      Navigator.of(context).pushReplacement(
+                        MaterialPageRoute(builder: (context) => LoginView()),
+                      );
                     },
                   ),
                 ],
@@ -80,27 +101,24 @@ class HomeView extends StatelessWidget {
               child: Column(
                 children: [
                   SizedBox(height: 16),
-                  Container(
-                    margin: EdgeInsets.symmetric(horizontal: 16),
-                    child: Image.asset(
-                      "assets/doorbell.png",
-                      height: 250,
-                      fit: BoxFit.contain,
-                    ),
-                  ),
-                  SizedBox(height: 16),
+                  _buildVideoPreview(),
+                  SizedBox(height: 100),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                     children: [
                       _buildControlButton(
-                        icon: Icons.mic,
-                        label: "Microphone",
+                        activeIcon: Icons.mic,
+                        inactiveIcon: Icons.mic_off,
+                        activeLabel: "Microphone",
+                        inactiveLabel: "Microphone",
                         active: homeVM.microphoneOn,
                         onTap: homeVM.toggleMicrophone,
                       ),
                       _buildControlButton(
-                        icon: Icons.volume_up,
-                        label: "Speaker",
+                        activeIcon: Icons.volume_up,
+                        inactiveIcon: Icons.volume_off,
+                        activeLabel: "Speaker",
+                        inactiveLabel: "Speaker",
                         active: homeVM.speakerOn,
                         onTap: homeVM.toggleSpeaker,
                       ),
@@ -115,9 +133,56 @@ class HomeView extends StatelessWidget {
     );
   }
 
+  Widget _buildVideoPreview() {
+    return Stack(
+      children: [
+        Container(
+          width: double.infinity,
+          height: 220,
+          color: Colors.black,
+        ),
+        Positioned.fill(
+          child: Center(
+            child: Container(
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.3),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                Icons.play_arrow,
+                size: 64,
+                color: Colors.white,
+              ),
+            ),
+          ),
+        ),
+        Positioned(
+          top: 12,
+          right: 12,
+          child: Container(
+            padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(
+              color: Colors.red,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Text(
+              "LIVE",
+              style: TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
   Widget _buildControlButton({
-    required IconData icon,
-    required String label,
+    required IconData activeIcon,
+    required IconData inactiveIcon,
+    required String activeLabel,
+    required String inactiveLabel,
     required bool active,
     required VoidCallback onTap,
   }) {
@@ -134,13 +199,13 @@ class HomeView extends StatelessWidget {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Icon(
-              icon,
+              active ? activeIcon : inactiveIcon,
               color: active ? Colors.white : Colors.blueGrey,
               size: 48,
             ),
             SizedBox(height: 8),
             Text(
-              label,
+              active ? activeLabel : inactiveLabel,
               style: TextStyle(
                 color: active ? Colors.white : Colors.black,
                 fontWeight: FontWeight.bold,

@@ -1,17 +1,12 @@
 import 'package:doorbot_fyp/viewmodels/auth_view_model.dart';
+import 'package:doorbot_fyp/views/home_view.dart';
+import 'package:doorbot_fyp/views/login_view.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../widgets/custom_button.dart';
 
 class SignUpView extends StatefulWidget {
-  final void Function(String message)? onSignUpComplete;
-
-  const SignUpView({
-    super.key,
-    this.onSignUpComplete,
-  });
-
   @override
   State<SignUpView> createState() => _SignUpViewState();
 }
@@ -41,16 +36,15 @@ class _SignUpViewState extends State<SignUpView>
       duration: const Duration(milliseconds: 800),
     );
 
-    _fadeAnimation = Tween<double>(begin: 0, end: 1).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeIn),
-    );
+    _fadeAnimation = Tween<double>(
+      begin: 0,
+      end: 1,
+    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeIn));
 
     _slideAnimation = Tween<Offset>(
       begin: const Offset(0, 0.3),
       end: Offset.zero,
-    ).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeOut),
-    );
+    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOut));
 
     _controller.forward();
   }
@@ -130,8 +124,8 @@ class _SignUpViewState extends State<SignUpView>
                             return 'Please enter your email.';
                           }
                           if (!RegExp(
-                                  r"^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$")
-                              .hasMatch(value.trim())) {
+                            r"^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$",
+                          ).hasMatch(value.trim())) {
                             return 'Please enter a valid email address.';
                           }
                           return null;
@@ -216,21 +210,31 @@ class _SignUpViewState extends State<SignUpView>
                                       passwordController.text,
                                       nameController.text.trim(),
                                     );
-
-                                    if (context.mounted) {
-                                      final message =
-                                          'Account created! Please verify your email before logging in.';
-
-                                      if (widget.onSignUpComplete != null) {
-                                        widget.onSignUpComplete!(message);
-                                      } else {
-                                        ScaffoldMessenger.of(context)
-                                            .showSnackBar(
-                                          SnackBar(content: Text(message)),
-                                        );
-                                        Navigator.of(context).pop();
-                                      }
-                                    }
+                                    await showDialog(
+                                      context: context,
+                                      builder: (context) => AlertDialog(
+                                        title: const Text('Success'),
+                                        content: const Text(
+                                          'Account created! Please verify your email before logging in.\nCheck your inbox or spam folder.',
+                                        ),
+                                        actions: [
+                                          TextButton(
+                                            onPressed: () {
+                                              Navigator.of(context).pop();
+                                              Navigator.of(
+                                                context,
+                                              ).pushReplacement(
+                                                MaterialPageRoute(
+                                                  builder: (context) =>
+                                                      const LoginView(),
+                                                ),
+                                              );
+                                            },
+                                            child: const Text('OK'),
+                                          ),
+                                        ],
+                                      ),
+                                    );
                                   } on FirebaseAuthException catch (e) {
                                     String message;
                                     if (e.code == 'email-already-in-use') {
@@ -293,9 +297,22 @@ class _SignUpViewState extends State<SignUpView>
                         onPressed: () async {
                           try {
                             await vm.loginWithGoogle();
-                            if (context.mounted) {
-                              Navigator.of(context)
-                                  .pushReplacementNamed('/home');
+
+                            if (vm.currentUser != null) {
+                              if (context.mounted) {
+                                Navigator.of(
+                                  context,
+                                ).pushReplacement(MaterialPageRoute(builder: (context) => const HomeView()));
+                              }
+                            } else {
+                              // User cancelled Google sign-in
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text(
+                                    'Google sign in was cancelled.',
+                                  ),
+                                ),
+                              );
                             }
                           } catch (e) {
                             ScaffoldMessenger.of(context).showSnackBar(
@@ -307,10 +324,7 @@ class _SignUpViewState extends State<SignUpView>
                             );
                           }
                         },
-                        icon: Image.asset(
-                          'assets/google_icon.png',
-                          height: 24,
-                        ),
+                        icon: Image.asset('assets/google_icon.png', height: 24),
                         label: const Text(
                           'Continue with Google',
                           style: TextStyle(
@@ -342,9 +356,9 @@ class _SignUpViewState extends State<SignUpView>
                               'Sign in',
                               style: TextStyle(color: Colors.blue),
                             ),
-                          )
+                          ),
                         ],
-                      )
+                      ),
                     ],
                   ),
                 ),
