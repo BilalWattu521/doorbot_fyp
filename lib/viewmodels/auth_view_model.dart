@@ -1,10 +1,9 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'package:google_sign_in/google_sign_in.dart';
+import 'package:firebase_database/firebase_database.dart';
 
 class AuthViewModel extends ChangeNotifier {
   final FirebaseAuth _auth = FirebaseAuth.instance;
-  final GoogleSignIn _googleSignIn = GoogleSignIn();
 
   bool _isLoading = false;
   bool get isLoading => _isLoading;
@@ -32,11 +31,8 @@ class AuthViewModel extends ChangeNotifier {
     try {
       setLoading(true);
 
-      final UserCredential userCredential =
-          await _auth.signInWithEmailAndPassword(
-        email: email,
-        password: password,
-      );
+      final UserCredential userCredential = await _auth
+          .signInWithEmailAndPassword(email: email, password: password);
 
       // reload user to ensure latest data
       await userCredential.user?.reload();
@@ -51,6 +47,11 @@ class AuthViewModel extends ChangeNotifier {
         );
       }
 
+      // Ensure database structure exists for existing users
+      if (refreshedUser != null) {
+        await _ensureUserDatabaseExists(refreshedUser);
+      }
+
       debugPrint('User logged in successfully: ${refreshedUser?.email}');
     } on FirebaseAuthException catch (e) {
       debugPrint('FirebaseAuthException during login: ${e.code} ${e.message}');
@@ -63,8 +64,40 @@ class AuthViewModel extends ChangeNotifier {
     }
   }
 
+  Future<void> _ensureUserDatabaseExists(User user) async {
+    try {
+      final DatabaseReference doorRef = FirebaseDatabase.instance.ref(
+        'users/${user.uid}/door',
+      );
+      final DatabaseReference doorbellRef = FirebaseDatabase.instance.ref(
+        'users/${user.uid}/doorbell',
+      );
+
+      final doorSnapshot = await doorRef.get();
+      if (!doorSnapshot.exists) {
+        debugPrint("Creating door node for existing user: ${user.uid}");
+        await doorRef.set({
+          'unlocked': false,
+          'timestamp': ServerValue.timestamp,
+        });
+      }
+
+      final doorbellSnapshot = await doorbellRef.get();
+      if (!doorbellSnapshot.exists) {
+        debugPrint("Creating doorbell node for existing user: ${user.uid}");
+        await doorbellRef.set({'timestamp': ServerValue.timestamp});
+      }
+    } catch (e) {
+      debugPrint("Error ensuring user database exists: $e");
+      // Don't block login if this fails, but log it
+    }
+  }
+
   Future<void> signUpWithEmail(
-      String email, String password, String name) async {
+    String email,
+    String password,
+    String name,
+  ) async {
     try {
       setLoading(true);
 
@@ -75,6 +108,22 @@ class AuthViewModel extends ChangeNotifier {
 
       await result.user?.updateDisplayName(name);
       await result.user?.reload();
+
+      // Initialize database for the new user
+      if (result.user != null) {
+        final DatabaseReference doorRef = FirebaseDatabase.instance.ref(
+          'users/${result.user!.uid}/door',
+        );
+        await doorRef.set({
+          'unlocked': false,
+          'timestamp': ServerValue.timestamp,
+        });
+
+        final DatabaseReference doorbellRef = FirebaseDatabase.instance.ref(
+          'users/${result.user!.uid}/doorbell',
+        );
+        await doorbellRef.set({'timestamp': ServerValue.timestamp});
+      }
 
       await result.user?.sendEmailVerification();
 
@@ -90,84 +139,35 @@ class AuthViewModel extends ChangeNotifier {
     }
   }
 
-Future<void> loginWithGoogle() async {
-  try {
-    setLoading(true);
-
-    final GoogleSignInAccount? googleUser = await _googleSignIn.signIn();
-    if (googleUser == null) {
-      // User cancelled the sign-in
-      setLoading(false);
-      return;
-    }
-
-    final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
-
-    final credential = GoogleAuthProvider.credential(
-      accessToken: googleAuth.accessToken,
-      idToken: googleAuth.idToken,
-    );
-
-    final UserCredential userCredential =
-        await _auth.signInWithCredential(credential);
-
-    User? user = userCredential.user;
-
-    if (user != null) {
-      if (user.displayName == null || user.displayName!.isEmpty) {
-        await user.updateDisplayName(googleUser.displayName ?? "Google User");
-        await user.reload();
-      }
-    }
-
-    debugPrint("Google login successful for: ${_auth.currentUser?.email}");
-  } on FirebaseAuthException catch (e) {
-    debugPrint('FirebaseAuthException during Google Sign-In: ${e.code} ${e.message}');
-    rethrow;
-  } catch (e) {
-    debugPrint('General exception during Google Sign-In: $e');
-    throw Exception("Google Sign-In failed.");
-  } finally {
-    setLoading(false);
-  }
-}
-
-
-
-
-  Future<void> resendVerificationEmail(
-      String email, String password) async {
+  Future<void> resendVerificationEmail(String email, String password) async {
     try {
       setLoading(true);
 
       // sign in temporarily to be able to send verification email
-      final userCredential =
-          await _auth.signInWithEmailAndPassword(
+      final userCredential = await _auth.signInWithEmailAndPassword(
         email: email,
         password: password,
       );
 
       await userCredential.user?.sendEmailVerification();
 
-      debugPrint(
-          "Verification email resent to: ${userCredential.user?.email}");
+      debugPrint("Verification email resent to: ${userCredential.user?.email}");
 
       await _auth.signOut();
     } on FirebaseAuthException catch (e) {
       debugPrint(
-          'FirebaseAuthException during resend verification: ${e.code} ${e.message}');
+        'FirebaseAuthException during resend verification: ${e.code} ${e.message}',
+      );
       rethrow;
     } catch (e) {
       debugPrint('Error sending verification email: $e');
-      throw Exception(
-          "Failed to send verification email. Please try again.");
+      throw Exception("Failed to send verification email. Please try again.");
     } finally {
       setLoading(false);
     }
   }
 
   Future<void> logout() async {
-    await _googleSignIn.signOut();
     await _auth.signOut();
     debugPrint("User logged out.");
   }
@@ -178,12 +178,12 @@ Future<void> loginWithGoogle() async {
       debugPrint("Password reset email sent to: $email");
     } on FirebaseAuthException catch (e) {
       debugPrint(
-          'FirebaseAuthException during password reset: ${e.code} ${e.message}');
+        'FirebaseAuthException during password reset: ${e.code} ${e.message}',
+      );
       rethrow;
     } catch (e) {
       debugPrint('Error sending password reset email: $e');
       throw Exception("Failed to send password reset email.");
     }
   }
-
 }

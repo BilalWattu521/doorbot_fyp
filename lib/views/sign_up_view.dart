@@ -1,5 +1,4 @@
 import 'package:doorbot_fyp/viewmodels/auth_view_model.dart';
-import 'package:doorbot_fyp/views/home_view.dart';
 import 'package:doorbot_fyp/views/login_view.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
@@ -212,6 +211,7 @@ class _SignUpViewState extends State<SignUpView>
                                       passwordController.text,
                                       nameController.text.trim(),
                                     );
+                                    if (!context.mounted) return;
                                     await showDialog(
                                       context: context,
                                       builder: (context) => AlertDialog(
@@ -222,7 +222,6 @@ class _SignUpViewState extends State<SignUpView>
                                         actions: [
                                           TextButton(
                                             onPressed: () {
-                                              Navigator.of(context).pop();
                                               Navigator.of(
                                                 context,
                                               ).pushReplacement(
@@ -238,6 +237,7 @@ class _SignUpViewState extends State<SignUpView>
                                       ),
                                     );
                                   } on FirebaseAuthException catch (e) {
+                                    if (!context.mounted) return;
                                     String message;
                                     if (e.code == 'email-already-in-use') {
                                       message =
@@ -257,6 +257,7 @@ class _SignUpViewState extends State<SignUpView>
                                       SnackBar(content: Text(message)),
                                     );
                                   } catch (e) {
+                                    if (!context.mounted) return;
                                     ScaffoldMessenger.of(context).showSnackBar(
                                       const SnackBar(
                                         content: Text(
@@ -269,82 +270,38 @@ class _SignUpViewState extends State<SignUpView>
                               },
                             ),
 
-                      const SizedBox(height: 20),
-                      Row(
+                      /*
+                    // Google Sign In Removed
+                    const SizedBox(height: 20),
+                    Row(
                         children: [
-                          Expanded(
+                        Expanded(
                             child: Divider(
-                              color: Colors.blueGrey.shade200,
-                              thickness: 1,
+                            color: Colors.blueGrey.shade200,
+                            thickness: 1,
                             ),
-                          ),
-                          const Padding(
+                        ),
+                        const Padding(
                             padding: EdgeInsets.symmetric(horizontal: 8),
                             child: Text(
-                              'Or continue with',
-                              style: TextStyle(color: Colors.blueGrey),
+                            'Or continue with',
+                            style: TextStyle(color: Colors.blueGrey),
                             ),
-                          ),
-                          Expanded(
+                        ),
+                        Expanded(
                             child: Divider(
-                              color: Colors.blueGrey.shade200,
-                              thickness: 1,
+                            color: Colors.blueGrey.shade200,
+                            thickness: 1,
                             ),
-                          ),
+                        ),
                         ],
-                      ),
-                      const SizedBox(height: 20),
+                    ),
+                    const SizedBox(height: 20),
 
-                      ElevatedButton.icon(
-                        onPressed: () async {
-                          try {
-                            await vm.loginWithGoogle();
-
-                            if (vm.currentUser != null) {
-                              if (context.mounted) {
-                                Navigator.of(
-                                  context,
-                                ).pushReplacement(MaterialPageRoute(builder: (context) => const HomeView()));
-                              }
-                            } else {
-                              // User cancelled Google sign-in
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Text(
-                                    'Google sign in was cancelled.',
-                                  ),
-                                ),
-                              );
-                            }
-                          } catch (e) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text(
-                                  'Google sign in failed. Sorry for the inconvenience.',
-                                ),
-                              ),
-                            );
-                          }
-                        },
-                        icon: Image.asset('assets/google_icon.png', height: 24),
-                        label: const Text(
-                          'Continue with Google',
-                          style: TextStyle(
-                            color: Colors.black87,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                        style: ElevatedButton.styleFrom(
-                          elevation: 0,
-                          minimumSize: const Size(double.infinity, 50),
-                          backgroundColor: Colors.blueGrey.shade50,
-                          side: BorderSide(color: Colors.blueGrey.shade100),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                        ),
-                      ),
-
+                    ElevatedButton.icon(
+                        // ... Google Login Button Code ...
+                    ),
+*/
                       const SizedBox(height: 30),
                       Row(
                         mainAxisAlignment: MainAxisAlignment.center,

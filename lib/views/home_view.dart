@@ -1,5 +1,5 @@
 import 'package:doorbot_fyp/views/history_view.dart';
-import 'package:doorbot_fyp/views/login_view.dart';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:adaptive_theme/adaptive_theme.dart';
@@ -7,6 +7,7 @@ import 'package:adaptive_theme/adaptive_theme.dart';
 import '../viewmodels/home_view_model.dart';
 import '../viewmodels/auth_view_model.dart';
 import '../widgets/custom_curved_appbar.dart';
+import '../widgets/firebase_image_viewer.dart';
 
 class HomeView extends StatelessWidget {
   const HomeView({super.key});
@@ -94,9 +95,7 @@ class HomeView extends StatelessWidget {
                     title: Text("Logout", style: TextStyle(color: Colors.red)),
                     onTap: () async {
                       await authVM.logout();
-                      Navigator.of(context).pushReplacement(
-                        MaterialPageRoute(builder: (context) => LoginView()),
-                      );
+                      // No need to navigate manually, AuthWrapper handles it
                     },
                   ),
                 ],
@@ -107,6 +106,87 @@ class HomeView extends StatelessWidget {
                 children: [
                   SizedBox(height: 16),
                   _buildVideoPreview(),
+                  SizedBox(height: 30),
+                  _buildDoorStatus(homeVM),
+                  SizedBox(height: 30),
+                  IgnorePointer(
+                    ignoring: !homeVM.canUnlock,
+                    child: GestureDetector(
+                      onTapDown: (_) => homeVM.onUnlockPressed(),
+                      onTapUp: (_) => homeVM.onUnlockReleased(),
+                      onTapCancel: () => homeVM.onUnlockReleased(),
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 200),
+                        width: 160,
+                        height: 160,
+                        decoration: BoxDecoration(
+                          color: !homeVM.canUnlock
+                              ? Colors.grey.shade400
+                              : homeVM.unlockPressed
+                              ? Colors.green
+                              : Colors.white,
+                          borderRadius: BorderRadius.circular(80), // Circular
+                          border: Border.all(
+                            color: !homeVM.canUnlock
+                                ? Colors.grey
+                                : Colors.green,
+                            width: homeVM.unlockPressed ? 0 : 4,
+                          ),
+                          boxShadow: [
+                            if (homeVM.unlockPressed && homeVM.canUnlock)
+                              BoxShadow(
+                                color: Colors.green.withAlpha(150),
+                                blurRadius: 20,
+                                spreadRadius: 5,
+                              )
+                            else
+                              BoxShadow(
+                                color: Colors.grey.withAlpha(50),
+                                blurRadius: 10,
+                                spreadRadius: 2,
+                                offset: const Offset(0, 4),
+                              ),
+                          ],
+                        ),
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              !homeVM.canUnlock
+                                  ? Icons.timer_outlined
+                                  : homeVM.unlockPressed
+                                  ? Icons.lock_open
+                                  : Icons.lock_outline,
+                              color: !homeVM.canUnlock
+                                  ? Colors.white
+                                  : homeVM.unlockPressed
+                                  ? Colors.white
+                                  : Colors.green,
+                              size: 48,
+                            ),
+                            const SizedBox(height: 12),
+                            Text(
+                              !homeVM.canUnlock
+                                  ? "PLEASE\nWAIT"
+                                  : homeVM.unlockPressed
+                                  ? "UNLOCKING"
+                                  : "TAP TO\nUNLOCK",
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                color: !homeVM.canUnlock
+                                    ? Colors.white
+                                    : homeVM.unlockPressed
+                                    ? Colors.white
+                                    : Colors.green,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 16,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
                   SizedBox(height: 100),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceEvenly,
@@ -139,39 +219,118 @@ class HomeView extends StatelessWidget {
   }
 
   Widget _buildVideoPreview() {
-    return Stack(
-      children: [
-        Container(width: double.infinity, height: 220, color: Colors.black),
-        Positioned.fill(
-          child: Center(
+    return Container(
+      width: double.infinity,
+      height: 220,
+      decoration: BoxDecoration(
+        color: Colors.black,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Stack(
+        children: [
+          // Display latest image from Firebase Storage
+          ClipRRect(
+            borderRadius: BorderRadius.circular(8),
+            child: FirebaseImageViewer(
+              imagePath:
+                  'doorbell/latest.jpg', // Update path based on your Firebase Storage structure
+              width: double.infinity,
+              height: 220,
+              fit: BoxFit.cover,
+              showLoadingIndicator: true,
+            ),
+          ),
+          // LIVE label overlay
+          Positioned(
+            top: 12,
+            right: 12,
             child: Container(
+              padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
               decoration: BoxDecoration(
-                color: Colors.white.withAlpha(100),
+                color: Colors.red,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Text(
+                "LIVE",
+                style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDoorStatus(HomeViewModel homeVM) {
+    final data = homeVM.doorStatus;
+    final isLoading = data == null;
+    final status = data?['status'] ?? 'unknown';
+    final isLocked = status == 'locked';
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        color: isLocked ? Colors.red.shade50 : Colors.green.shade50,
+        border: Border.all(
+          color: isLocked ? Colors.red : Colors.green,
+          width: 2,
+        ),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Row(
+            children: [
+              Icon(
+                isLocked ? Icons.lock : Icons.lock_open,
+                color: isLocked ? Colors.red : Colors.green,
+                size: 28,
+              ),
+              SizedBox(width: 12),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Door Status',
+                    style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                  ),
+                  Text(
+                    isLoading
+                        ? 'Loading...'
+                        : isLocked
+                        ? 'Locked'
+                        : 'Unlocked',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: isLocked ? Colors.red : Colors.green,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+          if (isLoading)
+            SizedBox(
+              width: 20,
+              height: 20,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            )
+          else
+            Container(
+              width: 16,
+              height: 16,
+              decoration: BoxDecoration(
                 shape: BoxShape.circle,
-              ),
-              child: Icon(Icons.play_arrow, size: 64, color: Colors.white),
-            ),
-          ),
-        ),
-        Positioned(
-          top: 12,
-          right: 12,
-          child: Container(
-            padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            decoration: BoxDecoration(
-              color: Colors.red,
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Text(
-              "LIVE",
-              style: TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.bold,
+                color: isLocked ? Colors.red : Colors.green,
               ),
             ),
-          ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 

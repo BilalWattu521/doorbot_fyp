@@ -74,6 +74,7 @@ class _ForgotPasswordViewState extends State<ForgotPasswordView> {
                               Navigator.pop(context);
                             }
                           } catch (e) {
+                            if (!context.mounted) return;
                             ScaffoldMessenger.of(context).showSnackBar(
                               SnackBar(content: Text('Error: ${e.toString()}')),
                             );

@@ -1,6 +1,5 @@
 import 'package:doorbot_fyp/viewmodels/auth_view_model.dart';
 import 'package:doorbot_fyp/views/forgot_password_view.dart';
-import 'package:doorbot_fyp/views/home_view.dart';
 import 'package:doorbot_fyp/views/sign_up_view.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -52,9 +51,9 @@ class _LoginViewState extends State<LoginView>
 
     if (widget.successMessage != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(widget.successMessage!)),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(widget.successMessage!)));
       });
     }
   }
@@ -94,6 +93,7 @@ class _LoginViewState extends State<LoginView>
                   passwordController.text.trim(),
                 );
 
+                if (!mounted) return;
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(
                     content: Text(
@@ -102,6 +102,7 @@ class _LoginViewState extends State<LoginView>
                   ),
                 );
               } catch (e) {
+                if (!mounted) return;
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(
                     content: Text(
@@ -117,70 +118,51 @@ class _LoginViewState extends State<LoginView>
     );
   }
 
-Future<void> _handleLogin(AuthViewModel vm) async {
-  if (_formKey.currentState?.validate() ?? false) {
-    final email = emailController.text.trim();
-    final password = passwordController.text.trim();
+  Future<void> _handleLogin(AuthViewModel vm) async {
+    if (_formKey.currentState?.validate() ?? false) {
+      final email = emailController.text.trim();
+      final password = passwordController.text.trim();
 
-    try {
-      await vm.loginWithEmail(email, password);
-      if (!context.mounted) return;
+      try {
+        await vm.loginWithEmail(email, password);
+        if (!mounted) return;
 
-      Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (context) => const HomeView()),
-      );
-    } on FirebaseAuthException catch (e) {
-      if (e.code == 'email-not-verified') {
-        _showResendVerificationDialog(email);
-        return;
-      }
+        // Navigation is handled by AuthWrapper in main.dart
+      } on FirebaseAuthException catch (e) {
+        if (!mounted) return;
+        if (e.code == 'email-not-verified') {
+          _showResendVerificationDialog(email);
+          return;
+        }
 
-      String message = 'Something went wrong. Please try again.';
-      if (e.code == 'user-not-found') {
-        message = 'No account found for this email. Please sign up first.';
-      } else if (e.code == 'wrong-password') {
-        message = 'Incorrect password. Please try again.';
-      } else if (e.code == 'user-disabled') {
-        message = 'Your account has been disabled.';
-      } else if (e.code == 'invalid-email') {
-        message = 'The email address is badly formatted.';
-      } else if (e.code == 'invalid-credential') {
-        message = 'invalid credentials.';
-      } else if (e.message != null) {
-        message = e.message!;
-      }
+        String message = 'Something went wrong. Please try again.';
+        if (e.code == 'user-not-found') {
+          message = 'No account found for this email. Please sign up first.';
+        } else if (e.code == 'wrong-password') {
+          message = 'Incorrect password. Please try again.';
+        } else if (e.code == 'user-disabled') {
+          message = 'Your account has been disabled.';
+        } else if (e.code == 'invalid-email') {
+          message = 'The email address is badly formatted.';
+        } else if (e.code == 'invalid-credential') {
+          message = 'invalid credentials.';
+        } else if (e.message != null) {
+          message = e.message!;
+        }
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(message)),
-      );
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Sorry, something went wrong while logging in. Please try again.',
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(message)));
+      } catch (e) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Sorry, something went wrong while logging in. Please try again.',
+            ),
           ),
-        ),
-      );
-    }
-  }
-}
-
-
-  Future<void> _handleGoogleLogin(AuthViewModel vm) async {
-    try {
-      vm.setLoading(true);
-      await vm.loginWithGoogle();
-      if (context.mounted) {
-        Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (context) => const HomeView()));
+        );
       }
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Google sign in failed. Please try again later.'),
-        ),
-      );
-    } finally {
-      vm.setLoading(false);
     }
   }
 
@@ -212,50 +194,15 @@ Future<void> _handleLogin(AuthViewModel vm) async {
                       style: TextStyle(color: Colors.blueGrey, fontSize: 16),
                     ),
                     const SizedBox(height: 32),
-                    ElevatedButton.icon(
-                      onPressed: () => _handleGoogleLogin(vm),
-                      icon: Image.asset('assets/google_icon.png', height: 24),
-                      label: const Text(
-                        'Continue with Google',
-                        style: TextStyle(
-                          color: Colors.black87,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                      style: ElevatedButton.styleFrom(
-                        elevation: 0,
-                        minimumSize: const Size(double.infinity, 50),
-                        backgroundColor: Colors.blueGrey.shade50,
-                        side: BorderSide(color: Colors.blueGrey.shade100),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                      ),
-                    ),
                     const SizedBox(height: 20),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Divider(
-                            color: Colors.blueGrey.shade200,
-                            thickness: 1,
-                          ),
-                        ),
-                        const Padding(
-                          padding: EdgeInsets.symmetric(horizontal: 8),
-                          child: Text(
-                            'Or continue with',
-                            style: TextStyle(color: Colors.blueGrey),
-                          ),
-                        ),
-                        Expanded(
-                          child: Divider(
-                            color: Colors.blueGrey.shade200,
-                            thickness: 1,
-                          ),
-                        ),
-                      ],
+                    /*
+                    // Google Sign In Removed
+                    ElevatedButton.icon(
+                      onPressed: () => _handleLogin(vm),
+                      icon: Icon(Icons.login), // Placeholder
+                      label: const Text('Login'),
                     ),
+                    */
                     const SizedBox(height: 20),
                     Form(
                       key: _formKey,
@@ -273,8 +220,8 @@ Future<void> _handleLogin(AuthViewModel vm) async {
                                 return 'Please enter your email.';
                               }
                               if (!RegExp(
-                                      r"^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$")
-                                  .hasMatch(value.trim())) {
+                                r"^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$",
+                              ).hasMatch(value.trim())) {
                                 return 'Please enter a valid email address.';
                               }
                               return null;
@@ -319,6 +266,8 @@ Future<void> _handleLogin(AuthViewModel vm) async {
                       alignment: Alignment.centerRight,
                       child: TextButton(
                         onPressed: () {
+                          // Navigation to ForgotPasswordView is a direct action, not handled by AuthWrapper's state changes.
+                          // This Navigator.push is kept as it's a specific user action within the auth flow.
                           Navigator.push(
                             context,
                             MaterialPageRoute(
@@ -348,9 +297,7 @@ Future<void> _handleLogin(AuthViewModel vm) async {
                           onPressed: () {
                             Navigator.push(
                               context,
-                              MaterialPageRoute(
-                                builder: (_) => SignUpView(),
-                              ),
+                              MaterialPageRoute(builder: (_) => SignUpView()),
                             );
                           },
                           child: const Text(
