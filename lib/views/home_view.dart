@@ -7,7 +7,6 @@ import 'package:adaptive_theme/adaptive_theme.dart';
 import '../viewmodels/home_view_model.dart';
 import '../viewmodels/auth_view_model.dart';
 import '../widgets/custom_curved_appbar.dart';
-import '../widgets/firebase_image_viewer.dart';
 
 class HomeView extends StatelessWidget {
   const HomeView({super.key});
@@ -105,7 +104,7 @@ class HomeView extends StatelessWidget {
               child: Column(
                 children: [
                   SizedBox(height: 16),
-                  _buildVideoPreview(),
+                  _buildVideoPreview(homeVM),
                   SizedBox(height: 30),
                   _buildDoorStatus(homeVM),
                   SizedBox(height: 30),
@@ -218,7 +217,7 @@ class HomeView extends StatelessWidget {
     );
   }
 
-  Widget _buildVideoPreview() {
+  Widget _buildVideoPreview(HomeViewModel homeVM) {
     return Container(
       width: double.infinity,
       height: 220,
@@ -228,34 +227,65 @@ class HomeView extends StatelessWidget {
       ),
       child: Stack(
         children: [
-          // Display latest image from Firebase Storage
           ClipRRect(
             borderRadius: BorderRadius.circular(8),
-            child: FirebaseImageViewer(
-              imagePath:
-                  'doorbell/latest.jpg', // Update path based on your Firebase Storage structure
-              width: double.infinity,
-              height: 220,
-              fit: BoxFit.cover,
-              showLoadingIndicator: true,
-            ),
+            child: homeVM.isStreaming && homeVM.currentFrame != null
+                ? Image.memory(
+                    homeVM.currentFrame!,
+                    width: double.infinity,
+                    height: 220,
+                    fit: BoxFit.cover,
+                    gaplessPlayback: true,
+                  )
+                : Container(
+                    width: double.infinity,
+                    height: 220,
+                    color: Colors.grey[900],
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.videocam_off, color: Colors.grey, size: 48),
+                        SizedBox(height: 8),
+                        Text(
+                          "Waiting for camera...",
+                          style: TextStyle(color: Colors.grey, fontSize: 14),
+                        ),
+                      ],
+                    ),
+                  ),
           ),
-          // LIVE label overlay
+          // LIVE indicator
           Positioned(
             top: 12,
             right: 12,
             child: Container(
               padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
               decoration: BoxDecoration(
-                color: Colors.red,
+                color: homeVM.isStreaming ? Colors.red : Colors.grey,
                 borderRadius: BorderRadius.circular(8),
               ),
-              child: Text(
-                "LIVE",
-                style: TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
-                ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (homeVM.isStreaming)
+                    Container(
+                      width: 8,
+                      height: 8,
+                      margin: EdgeInsets.only(right: 4),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                  Text(
+                    homeVM.isStreaming ? "LIVE" : "OFFLINE",
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
               ),
             ),
           ),

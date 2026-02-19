@@ -1,6 +1,9 @@
 import 'dart:async';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
 import 'package:doorbot_fyp/services/door_control_service.dart';
+import 'package:doorbot_fyp/config/app_config.dart';
 
 class HomeViewModel extends ChangeNotifier {
   bool microphoneOn = false;
@@ -13,33 +16,63 @@ class HomeViewModel extends ChangeNotifier {
   Map<dynamic, dynamic>? _doorStatus;
   Map<dynamic, dynamic>? get doorStatus => _doorStatus;
 
+  // Live stream state
+  Uint8List? _currentFrame;
+  Uint8List? get currentFrame => _currentFrame;
+  bool _isStreaming = false;
+  bool get isStreaming => _isStreaming;
+  Timer? _frameTimer;
+
+  // Relay server URL
+  static const String _latestFrameUrl = '${AppConfig.relayStreamUrl}/latest';
+
   HomeViewModel() {
     _statusSubscription = _doorControl.getDoorStatusStream().listen((data) {
-      // Only notify if data actually changed to prevent UI spam/freezing
       if (_areMapsEqual(_doorStatus, data)) return;
-
       _doorStatus = data;
       notifyListeners();
     });
+
+    // Start polling for frames
+    _startPolling();
+  }
+
+  void _startPolling() {
+    // Poll every 300ms (~3 FPS display)
+    _frameTimer = Timer.periodic(const Duration(milliseconds: 300), (_) {
+      _fetchLatestFrame();
+    });
+  }
+
+  Future<void> _fetchLatestFrame() async {
+    try {
+      final response = await http
+          .get(Uri.parse(_latestFrameUrl))
+          .timeout(const Duration(seconds: 3));
+
+      if (response.statusCode == 200 && response.bodyBytes.isNotEmpty) {
+        _currentFrame = response.bodyBytes;
+        if (!_isStreaming) {
+          _isStreaming = true;
+        }
+        notifyListeners();
+      }
+    } catch (_) {
+      // Silently ignore — next poll will retry
+    }
   }
 
   bool _areMapsEqual(Map? m1, Map? m2) {
     if (m1 == m2) return true;
     if (m1 == null || m2 == null) return false;
-
-    // We mainly care about the 'unlocked' status for the UI
     if (m1['unlocked'] != m2['unlocked']) return false;
-
-    // Check timestamp if strictly needed, but might be noisy.
-    // If timestamp updates but status is same, do we need to rebuild?
-    // Probably not for the "Status" text, but maybe for logging?
-    // Let's stick to status for now to reduce noise.
     return true;
   }
 
   @override
   void dispose() {
     _statusSubscription?.cancel();
+    _frameTimer?.cancel();
     super.dispose();
   }
 
@@ -69,10 +102,9 @@ class HomeViewModel extends ChangeNotifier {
     _sendUnlockCommand();
     notifyListeners();
 
-    // Re-enable button after 2 seconds
     Future.delayed(const Duration(seconds: 2), () {
       _canUnlock = true;
-      unlockPressed = false; // Also verify visual state is reset
+      unlockPressed = false;
       notifyListeners();
     });
   }
@@ -84,9 +116,7 @@ class HomeViewModel extends ChangeNotifier {
 
   Future<void> _sendUnlockCommand() async {
     try {
-      // Send unlock command to Firebase Realtime Database (for Arduino)
       await _doorControl.sendUnlockCommand();
-
       debugPrint('✅ Unlock command sent successfully');
     } catch (e) {
       debugPrint('❌ Error sending unlock command: $e');
