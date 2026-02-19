@@ -53,6 +53,19 @@ app.get("/stream", (req, res) => {
   console.log(`Client connected. Active: ${clients.length}`);
 });
 
+// ---- Get latest frame as JPEG (for Flutter polling) ----
+app.get("/latest", (req, res) => {
+  if (!latestFrame) {
+    return res.status(204).send();
+  }
+  res.writeHead(200, {
+    "Content-Type": "image/jpeg",
+    "Content-Length": latestFrame.length,
+    "Cache-Control": "no-cache, no-store, must-revalidate",
+  });
+  res.end(latestFrame);
+});
+
 // ---- Health check ----
 app.get("/", (req, res) => {
   res.send(`DoorBot Relay Server | Active clients: ${clients.length} | Frame: ${latestFrame ? "yes" : "no"}`);
