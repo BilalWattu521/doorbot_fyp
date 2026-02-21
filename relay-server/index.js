@@ -2,73 +2,52 @@ const express = require("express");
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Store latest JPEG frame in memory
-let latestFrame = null;
-// All connected MJPEG stream clients
-const clients = [];
+// Secret API key from environment variable (set in Render dashboard)
+const API_KEY = process.env.DOORBOT_API_KEY || "";
+
+// Store latest frame PER USER (keyed by UID)
+const frames = {}; // { "uid123": Buffer, "uid456": Buffer, ... }
+
+// Middleware: validate API key
+function auth(req, res, next) {
+  const key = req.headers["x-api-key"];
+  if (!API_KEY || key !== API_KEY) {
+    return res.status(401).send("Unauthorized");
+  }
+  next();
+}
 
 // ---- ESP32 sends frames here ----
-app.post("/upload", express.raw({ type: "image/jpeg", limit: "1mb" }), (req, res) => {
-  if (!req.body || req.body.length === 0) {
-    return res.status(400).send("No image data");
-  }
+app.post("/upload", auth, express.raw({ type: "image/jpeg", limit: "1mb" }), (req, res) => {
+  const uid = req.headers["x-user-uid"];
+  if (!uid) return res.status(400).send("Missing UID");
+  if (!req.body || req.body.length === 0) return res.status(400).send("No image data");
 
-  latestFrame = req.body;
-
-  // Push frame to all connected MJPEG clients
-  clients.forEach((client) => {
-    client.write(`--frame\r\nContent-Type: image/jpeg\r\nContent-Length: ${latestFrame.length}\r\n\r\n`);
-    client.write(latestFrame);
-    client.write("\r\n");
-  });
-
+  // Store frame for this specific user
+  frames[uid] = req.body;
   res.status(200).send("OK");
 });
 
-// ---- Flutter app connects here for MJPEG stream ----
-app.get("/stream", (req, res) => {
-  res.writeHead(200, {
-    "Content-Type": "multipart/x-mixed-replace; boundary=frame",
-    "Cache-Control": "no-cache",
-    "Connection": "keep-alive",
-  });
+// ---- Flutter app fetches latest frame ----
+app.get("/latest", auth, (req, res) => {
+  const uid = req.headers["x-user-uid"];
+  if (!uid) return res.status(400).send("Missing UID");
 
-  // Send current frame immediately if available
-  if (latestFrame) {
-    res.write(`--frame\r\nContent-Type: image/jpeg\r\nContent-Length: ${latestFrame.length}\r\n\r\n`);
-    res.write(latestFrame);
-    res.write("\r\n");
-  }
+  const frame = frames[uid];
+  if (!frame) return res.status(204).send();
 
-  // Add this client to the list
-  clients.push(res);
-
-  // Remove client on disconnect
-  req.on("close", () => {
-    const index = clients.indexOf(res);
-    if (index !== -1) clients.splice(index, 1);
-    console.log(`Client disconnected. Active: ${clients.length}`);
-  });
-
-  console.log(`Client connected. Active: ${clients.length}`);
-});
-
-// ---- Get latest frame as JPEG (for Flutter polling) ----
-app.get("/latest", (req, res) => {
-  if (!latestFrame) {
-    return res.status(204).send();
-  }
   res.writeHead(200, {
     "Content-Type": "image/jpeg",
-    "Content-Length": latestFrame.length,
+    "Content-Length": frame.length,
     "Cache-Control": "no-cache, no-store, must-revalidate",
   });
-  res.end(latestFrame);
+  res.end(frame);
 });
 
-// ---- Health check ----
+// ---- Health check (no auth needed) ----
 app.get("/", (req, res) => {
-  res.send(`DoorBot Relay Server | Active clients: ${clients.length} | Frame: ${latestFrame ? "yes" : "no"}`);
+  const userCount = Object.keys(frames).length;
+  res.send(`DoorBot Relay Server | Users: ${userCount} | Secured: ${API_KEY ? "yes" : "no"}`);
 });
 
 app.listen(PORT, () => {
