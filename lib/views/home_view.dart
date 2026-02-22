@@ -13,207 +13,189 @@ class HomeView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ChangeNotifierProvider<HomeViewModel>(
-      create: (_) => HomeViewModel(),
-      child: Consumer2<HomeViewModel, AuthViewModel>(
-        builder: (context, homeVM, authVM, _) {
-          return Scaffold(
-            appBar: CustomCurvedAppBar(title: "Front Door"),
-            drawer: Drawer(
-              child: Column(
-                children: [
-                  UserAccountsDrawerHeader(
-                    accountName: Text(
-                      authVM.displayName,
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 18,
-                      ),
-                    ),
-                    accountEmail: Text(authVM.email),
-                    currentAccountPicture: CircleAvatar(
-                      backgroundColor: Colors.white,
-                      child: Icon(
-                        Icons.person,
-                        color: Colors.blueAccent,
-                        size: 40,
-                      ),
-                    ),
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: [Colors.blueAccent, Colors.lightBlueAccent],
-                      ),
-                    ),
+    return Consumer2<HomeViewModel, AuthViewModel>(
+      builder: (context, homeVM, authVM, _) {
+        return Scaffold(
+          appBar: CustomCurvedAppBar(title: "Front Door"),
+          drawer: Drawer(
+            child: Column(
+              children: [
+                UserAccountsDrawerHeader(
+                  accountName: Text(
+                    authVM.displayName,
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
                   ),
-                  ListTile(
-                    leading: Icon(Icons.history, color: Colors.blueAccent),
-                    title: Text("History"),
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(builder: (context) => HistoryView()),
-                      );
-                    },
-                  ),
-                  SwitchListTile(
-                    secondary: Icon(
-                      Icons.notifications,
+                  accountEmail: Text(authVM.email),
+                  currentAccountPicture: CircleAvatar(
+                    backgroundColor: Colors.white,
+                    child: Icon(
+                      Icons.person,
                       color: Colors.blueAccent,
+                      size: 40,
                     ),
-                    title: Text("Notifications"),
-                    value: homeVM.notificationsOn,
-                    onChanged: (val) {
-                      homeVM.toggleNotifications();
-                    },
                   ),
-                  Builder(
-                    builder: (context) {
-                      final isDark =
-                          AdaptiveTheme.of(context).mode ==
-                          AdaptiveThemeMode.dark;
-                      return SwitchListTile(
-                        secondary: Icon(
-                          Icons.nightlight_round,
-                          color: Colors.blueAccent,
-                        ),
-                        title: Text("Dark Theme"),
-                        value: isDark,
-                        onChanged: (val) {
-                          if (val) {
-                            AdaptiveTheme.of(context).setDark();
-                          } else {
-                            AdaptiveTheme.of(context).setLight();
-                          }
-                        },
-                      );
-                    },
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [Colors.blueAccent, Colors.lightBlueAccent],
+                    ),
                   ),
-                  Spacer(),
-                  ListTile(
-                    leading: Icon(Icons.logout, color: Colors.red),
-                    title: Text("Logout", style: TextStyle(color: Colors.red)),
-                    onTap: () async {
-                      await authVM.logout();
-                      // No need to navigate manually, AuthWrapper handles it
-                    },
-                  ),
-                ],
-              ),
+                ),
+                ListTile(
+                  leading: Icon(Icons.history, color: Colors.blueAccent),
+                  title: Text("History"),
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (context) => HistoryView()),
+                    );
+                  },
+                ),
+
+                Builder(
+                  builder: (context) {
+                    final isDark =
+                        AdaptiveTheme.of(context).mode ==
+                        AdaptiveThemeMode.dark;
+                    return SwitchListTile(
+                      secondary: Icon(
+                        Icons.nightlight_round,
+                        color: Colors.blueAccent,
+                      ),
+                      title: Text("Dark Theme"),
+                      value: isDark,
+                      onChanged: (val) {
+                        if (val) {
+                          AdaptiveTheme.of(context).setDark();
+                        } else {
+                          AdaptiveTheme.of(context).setLight();
+                        }
+                      },
+                    );
+                  },
+                ),
+                Spacer(),
+                ListTile(
+                  leading: Icon(Icons.logout, color: Colors.red),
+                  title: Text("Logout", style: TextStyle(color: Colors.red)),
+                  onTap: () async {
+                    await authVM.logout();
+                    // No need to navigate manually, AuthWrapper handles it
+                  },
+                ),
+              ],
             ),
-            body: SingleChildScrollView(
-              child: Column(
-                children: [
-                  SizedBox(height: 16),
-                  _buildVideoPreview(homeVM),
-                  SizedBox(height: 30),
-                  _buildDoorStatus(homeVM),
-                  SizedBox(height: 30),
-                  IgnorePointer(
-                    ignoring: !homeVM.canUnlock,
-                    child: GestureDetector(
-                      onTapDown: (_) => homeVM.onUnlockPressed(),
-                      onTapUp: (_) => homeVM.onUnlockReleased(),
-                      onTapCancel: () => homeVM.onUnlockReleased(),
-                      child: AnimatedContainer(
-                        duration: const Duration(milliseconds: 200),
-                        width: 160,
-                        height: 160,
-                        decoration: BoxDecoration(
-                          color: !homeVM.canUnlock
-                              ? Colors.grey.shade400
-                              : homeVM.unlockPressed
-                              ? Colors.green
-                              : Colors.white,
-                          borderRadius: BorderRadius.circular(80), // Circular
-                          border: Border.all(
-                            color: !homeVM.canUnlock
-                                ? Colors.grey
-                                : Colors.green,
-                            width: homeVM.unlockPressed ? 0 : 4,
-                          ),
-                          boxShadow: [
-                            if (homeVM.unlockPressed && homeVM.canUnlock)
-                              BoxShadow(
-                                color: Colors.green.withAlpha(150),
-                                blurRadius: 20,
-                                spreadRadius: 5,
-                              )
-                            else
-                              BoxShadow(
-                                color: Colors.grey.withAlpha(50),
-                                blurRadius: 10,
-                                spreadRadius: 2,
-                                offset: const Offset(0, 4),
-                              ),
-                          ],
+          ),
+          body: SingleChildScrollView(
+            child: Column(
+              children: [
+                SizedBox(height: 16),
+                _buildVideoPreview(homeVM),
+                SizedBox(height: 30),
+                _buildDoorStatus(homeVM),
+                SizedBox(height: 30),
+                IgnorePointer(
+                  ignoring: !homeVM.canUnlock,
+                  child: GestureDetector(
+                    onTapDown: (_) => homeVM.onUnlockPressed(),
+                    onTapUp: (_) => homeVM.onUnlockReleased(),
+                    onTapCancel: () => homeVM.onUnlockReleased(),
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 200),
+                      width: 160,
+                      height: 160,
+                      decoration: BoxDecoration(
+                        color: !homeVM.canUnlock
+                            ? Colors.grey.shade400
+                            : homeVM.unlockPressed
+                            ? Colors.green
+                            : Colors.white,
+                        borderRadius: BorderRadius.circular(80), // Circular
+                        border: Border.all(
+                          color: !homeVM.canUnlock ? Colors.grey : Colors.green,
+                          width: homeVM.unlockPressed ? 0 : 4,
                         ),
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(
-                              !homeVM.canUnlock
-                                  ? Icons.timer_outlined
-                                  : homeVM.unlockPressed
-                                  ? Icons.lock_open
-                                  : Icons.lock_outline,
+                        boxShadow: [
+                          if (homeVM.unlockPressed && homeVM.canUnlock)
+                            BoxShadow(
+                              color: Colors.green.withAlpha(150),
+                              blurRadius: 20,
+                              spreadRadius: 5,
+                            )
+                          else
+                            BoxShadow(
+                              color: Colors.grey.withAlpha(50),
+                              blurRadius: 10,
+                              spreadRadius: 2,
+                              offset: const Offset(0, 4),
+                            ),
+                        ],
+                      ),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            !homeVM.canUnlock
+                                ? Icons.timer_outlined
+                                : homeVM.unlockPressed
+                                ? Icons.lock_open
+                                : Icons.lock_outline,
+                            color: !homeVM.canUnlock
+                                ? Colors.white
+                                : homeVM.unlockPressed
+                                ? Colors.white
+                                : Colors.green,
+                            size: 48,
+                          ),
+                          const SizedBox(height: 12),
+                          Text(
+                            !homeVM.canUnlock
+                                ? "PLEASE\nWAIT"
+                                : homeVM.unlockPressed
+                                ? "UNLOCKING"
+                                : "TAP TO\nUNLOCK",
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
                               color: !homeVM.canUnlock
                                   ? Colors.white
                                   : homeVM.unlockPressed
                                   ? Colors.white
                                   : Colors.green,
-                              size: 48,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 16,
                             ),
-                            const SizedBox(height: 12),
-                            Text(
-                              !homeVM.canUnlock
-                                  ? "PLEASE\nWAIT"
-                                  : homeVM.unlockPressed
-                                  ? "UNLOCKING"
-                                  : "TAP TO\nUNLOCK",
-                              textAlign: TextAlign.center,
-                              style: TextStyle(
-                                color: !homeVM.canUnlock
-                                    ? Colors.white
-                                    : homeVM.unlockPressed
-                                    ? Colors.white
-                                    : Colors.green,
-                                fontWeight: FontWeight.bold,
-                                fontSize: 16,
-                              ),
-                            ),
-                          ],
-                        ),
+                          ),
+                        ],
                       ),
                     ),
                   ),
-                  SizedBox(height: 100),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                    children: [
-                      _buildControlButton(
-                        activeIcon: Icons.mic,
-                        inactiveIcon: Icons.mic_off,
-                        activeLabel: "Microphone",
-                        inactiveLabel: "Microphone",
-                        active: homeVM.microphoneOn,
-                        onTap: homeVM.toggleMicrophone,
-                      ),
-                      _buildControlButton(
-                        activeIcon: Icons.volume_up,
-                        inactiveIcon: Icons.volume_off,
-                        activeLabel: "Speaker",
-                        inactiveLabel: "Speaker",
-                        active: homeVM.speakerOn,
-                        onTap: homeVM.toggleSpeaker,
-                      ),
-                    ],
-                  ),
-                ],
-              ),
+                ),
+                SizedBox(height: 100),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  children: [
+                    _buildControlButton(
+                      activeIcon: Icons.mic,
+                      inactiveIcon: Icons.mic_off,
+                      activeLabel: "Microphone",
+                      inactiveLabel: "Microphone",
+                      active: homeVM.microphoneOn,
+                      onTap: homeVM.toggleMicrophone,
+                    ),
+                    _buildControlButton(
+                      activeIcon: Icons.volume_up,
+                      inactiveIcon: Icons.volume_off,
+                      activeLabel: "Speaker",
+                      inactiveLabel: "Speaker",
+                      active: homeVM.speakerOn,
+                      onTap: homeVM.toggleSpeaker,
+                    ),
+                  ],
+                ),
+              ],
             ),
-          );
-        },
-      ),
+          ),
+        );
+      },
     );
   }
 

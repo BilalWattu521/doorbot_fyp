@@ -1,6 +1,8 @@
 import 'package:doorbot_fyp/services/door_control_service.dart';
+import 'package:doorbot_fyp/services/history_service.dart';
 import 'package:doorbot_fyp/services/notification_service.dart';
 import 'package:doorbot_fyp/viewmodels/auth_view_model.dart';
+import 'package:doorbot_fyp/viewmodels/home_view_model.dart';
 import 'package:doorbot_fyp/views/login_view.dart';
 import 'package:doorbot_fyp/views/home_view.dart';
 import 'package:flutter/material.dart';
@@ -73,8 +75,19 @@ class _MyAppState extends State<MyApp> {
 
         await NotificationService().initialize();
 
-        await _setupFirebaseMessaging();
-        await _setupDoorbellListener();
+        // FCM and doorbell setup are non-critical — app should load even if they fail
+        try {
+          await _setupFirebaseMessaging();
+        } catch (e) {
+          debugPrint("⚠️ FCM setup failed (app will still work): $e");
+        }
+
+        try {
+          await _setupDoorbellListener();
+        } catch (e) {
+          debugPrint("⚠️ Doorbell listener setup failed: $e");
+        }
+
         if (mounted) {
           setState(() {
             _firebaseReady = true;
@@ -156,20 +169,29 @@ class _MyAppState extends State<MyApp> {
     ) {
       if (eventTime == null) return;
 
-      // If this is the first time we see data, just initialize the timestamp
+      // If this is the first time we see data, initialize the timestamp
       if (_lastHandledEventTime == null) {
         _lastHandledEventTime = eventTime;
+
+        // Still save to history if this event is recent (within last 30 seconds)
+        final age = DateTime.now().difference(eventTime);
+        if (age.inSeconds < 30) {
+          debugPrint("🔔 Fresh doorbell event on init — saving to history");
+          HistoryService().saveEvent('doorbell');
+        }
         return;
       }
 
-      // Track the latest event (for future in-app UI updates)
+      // Track the latest event
       final difference = eventTime.difference(_lastHandledEventTime!);
 
       if (difference.inMilliseconds > 0) {
         _lastHandledEventTime = eventTime;
         debugPrint("🔔 Doorbell Ring Detected! Time: $eventTime");
+        // Save to history
+        HistoryService().saveEvent('doorbell');
         // NOTE: No local notification here!
-        // Cloud Function sends FCM push which handles foreground + background + terminated.
+        // Render server listens to RTDB and sends FCM push which handles foreground + background + terminated.
       }
     });
   }
@@ -213,12 +235,16 @@ class _AuthWrapperState extends State<AuthWrapper> {
   StreamSubscription<User?>? _authSubscription;
   User? _user;
   bool _isLoading = true;
+  HomeViewModel? _homeViewModel;
 
   @override
   void initState() {
     super.initState();
     _user = FirebaseAuth.instance.currentUser;
     _isLoading = false;
+    if (_user != null) {
+      _homeViewModel = HomeViewModel();
+    }
     _startAuthListener();
   }
 
@@ -227,6 +253,13 @@ class _AuthWrapperState extends State<AuthWrapper> {
       (User? user) {
         debugPrint("🔐 AuthWrapper: Auth State Changed. User: ${user?.uid}");
         if (mounted) {
+          // Only create/dispose HomeViewModel when login state actually changes
+          if (user != null && _user == null) {
+            _homeViewModel = HomeViewModel();
+          } else if (user == null && _user != null) {
+            _homeViewModel?.dispose();
+            _homeViewModel = null;
+          }
           setState(() {
             _user = user;
             _isLoading = false;
@@ -243,6 +276,8 @@ class _AuthWrapperState extends State<AuthWrapper> {
   @override
   void dispose() {
     _authSubscription?.cancel();
+    _homeViewModel?.dispose();
+    _homeViewModel = null;
     super.dispose();
   }
 
@@ -252,9 +287,12 @@ class _AuthWrapperState extends State<AuthWrapper> {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
-    if (_user != null) {
+    if (_user != null && _homeViewModel != null) {
       debugPrint("🔐 AuthWrapper: Showing HomeView for ${_user!.email}");
-      return const HomeView();
+      return ChangeNotifierProvider<HomeViewModel>.value(
+        value: _homeViewModel!,
+        child: const HomeView(),
+      );
     }
 
     debugPrint("🔐 AuthWrapper: Showing LoginView");

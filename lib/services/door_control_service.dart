@@ -1,6 +1,7 @@
 import 'package:firebase_database/firebase_database.dart';
 import 'package:flutter/foundation.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'history_service.dart';
 
 class DoorControlService {
   static final DoorControlService _instance = DoorControlService._internal();
@@ -13,6 +14,7 @@ class DoorControlService {
 
   final FirebaseDatabase _database = FirebaseDatabase.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
+  final HistoryService _historyService = HistoryService();
 
   String? get _uid => _auth.currentUser?.uid;
 
@@ -33,6 +35,9 @@ class DoorControlService {
         'unlocked': true,
         'timestamp': ServerValue.timestamp,
       });
+
+      // Save to history
+      await _historyService.saveEvent('unlock');
 
       debugPrint('✅ Unlock command sent to Firebase for user: $_uid');
 
