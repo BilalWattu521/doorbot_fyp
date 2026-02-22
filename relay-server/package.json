@@ -1,12 +1,13 @@
 {
   "name": "doorbot-relay",
-  "version": "1.0.0",
-  "description": "MJPEG relay server for DoorBot ESP32-CAM",
+  "version": "2.0.0",
+  "description": "MJPEG relay server + push notification service for DoorBot",
   "main": "index.js",
   "scripts": {
     "start": "node index.js"
   },
   "dependencies": {
-    "express": "^4.18.2"
+    "express": "^4.18.2",
+    "firebase-admin": "^12.0.0"
   }
 }

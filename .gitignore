@@ -57,3 +57,6 @@ lib/config/app_config.dart
 
 # Arduino firmware (contains WiFi/Firebase credentials)
 arduino/
+
+#node-modules
+relay-server/node_modules/
