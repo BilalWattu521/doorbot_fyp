@@ -246,7 +246,8 @@ function startPolling() {
 
 // ─── Relay Server Routes (unchanged) ──────────────────────────────────────────
 
-const frames = {};
+const frames = {}; // { uid: { data: Buffer, timestamp: number } }
+const FRAME_MAX_AGE_MS = 10000; // 10 seconds — frames older than this are considered stale
 
 function auth(req, res, next) {
   const key = req.headers["x-api-key"];
@@ -266,7 +267,7 @@ app.post(
     if (!req.body || req.body.length === 0)
       return res.status(400).send("No image data");
 
-    frames[uid] = req.body;
+    frames[uid] = { data: req.body, timestamp: Date.now() };
     res.status(200).send("OK");
   }
 );
@@ -277,16 +278,21 @@ app.get("/latest", auth, (req, res) => {
 
   const frame = frames[uid];
   if (!frame) {
-    console.log(`📷 No frame yet for ${uid}`);
+    return res.status(204).send();
+  }
+
+  // Reject stale frames — ESP32 stopped uploading
+  const age = Date.now() - frame.timestamp;
+  if (age > FRAME_MAX_AGE_MS) {
     return res.status(204).send();
   }
 
   res.writeHead(200, {
     "Content-Type": "image/jpeg",
-    "Content-Length": frame.length,
+    "Content-Length": frame.data.length,
     "Cache-Control": "no-cache, no-store, must-revalidate",
   });
-  res.end(frame);
+  res.end(frame.data);
 });
 
 app.get("/", (req, res) => {
