@@ -1,5 +1,6 @@
 const express = require("express");
 const admin = require("firebase-admin");
+const https = require("https");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -76,7 +77,6 @@ async function discoverUsers() {
     // Use REST API with shallow=true — returns only keys, not data
     const url = `${databaseURL}/users.json?shallow=true&access_token=${token}`;
 
-    const https = require("https");
     const data = await new Promise((resolve, reject) => {
       const req = https.get(url, { timeout: 10000 }, (res) => {
         let body = "";
@@ -125,6 +125,8 @@ async function sendDoorbellNotification(uid, eventTimestamp) {
       console.log(`⏩ No FCM token for ${uid} — skipped`);
       return;
     }
+
+    console.log(`📱 FCM token for ${uid}: ${fcmToken.substring(0, 20)}...`);
 
     const payload = {
       token: fcmToken,
@@ -178,10 +180,13 @@ async function checkUserDoorbellEvent(uid) {
       return;
     }
 
-    if (eventTimestamp !== previous && eventTimestamp > previous) {
+    if (eventTimestamp !== previous) {
       lastEventTimestamps[uid] = eventTimestamp;
       console.log(`🔔 Doorbell! User ${uid}: ${eventTimestamp}`);
-      sendDoorbellNotification(uid, eventTimestamp);
+      // Fire-and-forget so notification send doesn't block polling/frame serving
+      sendDoorbellNotification(uid, eventTimestamp).catch((err) =>
+        console.error(`❌ Notification fire error ${uid}:`, err.message)
+      );
     }
   } catch (error) {
     console.error(`❌ Poll error ${uid}:`, error.message);
@@ -206,10 +211,10 @@ async function pollDoorbellEvents() {
       lastUserDiscovery = now;
     }
 
-    // Poll each user's doorbell event (tiny reads)
-    for (const uid of knownUsers) {
-      await checkUserDoorbellEvent(uid);
-    }
+    // Poll all users concurrently (don't block sequentially)
+    await Promise.all(
+      [...knownUsers].map((uid) => checkUserDoorbellEvent(uid))
+    );
 
     // Heartbeat log every 100 polls (~5 minutes at 3s interval)
     pollCount++;
@@ -271,7 +276,10 @@ app.get("/latest", auth, (req, res) => {
   if (!uid) return res.status(400).send("Missing UID");
 
   const frame = frames[uid];
-  if (!frame) return res.status(204).send();
+  if (!frame) {
+    console.log(`📷 No frame yet for ${uid}`);
+    return res.status(204).send();
+  }
 
   res.writeHead(200, {
     "Content-Type": "image/jpeg",
