@@ -7,51 +7,108 @@ const PORT = process.env.PORT || 3000;
 // Secret API key from environment variable (set in Render dashboard)
 const API_KEY = process.env.DOORBOT_API_KEY || "";
 
-// Poll interval for checking doorbell events (in ms)
-const POLL_INTERVAL = process.env.POLL_INTERVAL || 3000;
-
 // ─── Firebase Admin SDK Init ───────────────────────────────────────────────────
 
 let firebaseReady = false;
+let databaseURL = "";
 
 try {
   const serviceAccountEnv = process.env.FIREBASE_SERVICE_ACCOUNT;
   if (serviceAccountEnv) {
     const serviceAccount = JSON.parse(serviceAccountEnv);
+    databaseURL = `https://${serviceAccount.project_id}-default-rtdb.firebaseio.com`;
     admin.initializeApp({
       credential: admin.credential.cert(serviceAccount),
-      databaseURL: `https://${serviceAccount.project_id}-default-rtdb.firebaseio.com`,
+      databaseURL,
     });
     firebaseReady = true;
-    console.log("✅ Firebase Admin SDK initialized (service account JSON)");
+    console.log("✅ Firebase Admin SDK initialized");
   } else if (
     process.env.FIREBASE_PROJECT_ID &&
     process.env.FIREBASE_CLIENT_EMAIL &&
     process.env.FIREBASE_PRIVATE_KEY
   ) {
+    databaseURL = `https://${process.env.FIREBASE_PROJECT_ID}-default-rtdb.firebaseio.com`;
     admin.initializeApp({
       credential: admin.credential.cert({
         projectId: process.env.FIREBASE_PROJECT_ID,
         clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
         privateKey: process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, "\n"),
       }),
-      databaseURL: `https://${process.env.FIREBASE_PROJECT_ID}-default-rtdb.firebaseio.com`,
+      databaseURL,
     });
     firebaseReady = true;
-    console.log("✅ Firebase Admin SDK initialized (individual env vars)");
+    console.log("✅ Firebase Admin SDK initialized");
   } else {
-    console.warn(
-      "⚠️  No Firebase credentials found – push notifications disabled"
-    );
+    console.warn("⚠️  No Firebase credentials – notifications disabled");
   }
 } catch (err) {
-  console.error("❌ Firebase Admin SDK init failed:", err.message);
+  console.error("❌ Firebase init failed:", err.message);
 }
+
+// ─── Crash Protection ──────────────────────────────────────────────────────────
+
+process.on("uncaughtException", (err) => {
+  console.error("💥 Uncaught Exception:", err.message);
+});
+process.on("unhandledRejection", (reason) => {
+  console.error("💥 Unhandled Rejection:", reason);
+});
 
 // ─── Push Notification via RTDB Polling ────────────────────────────────────────
 
-// Track the last event timestamp per user so we only fire on NEW events
 const lastEventTimestamps = {}; // { uid: timestamp }
+const knownUsers = new Set();
+let lastUserDiscovery = 0;
+let pollCount = 0;
+
+/**
+ * Discover user UIDs using Firebase REST API with shallow=true.
+ * This returns ONLY the top-level keys, NOT the full user data.
+ * Much lighter than admin.database().ref("users").once("value")!
+ */
+async function discoverUsers() {
+  try {
+    // Get access token from Admin SDK
+    const accessToken = await admin.app().options.credential.getAccessToken();
+    const token = accessToken.access_token;
+
+    // Use REST API with shallow=true — returns only keys, not data
+    const url = `${databaseURL}/users.json?shallow=true&access_token=${token}`;
+
+    const https = require("https");
+    const data = await new Promise((resolve, reject) => {
+      const req = https.get(url, { timeout: 10000 }, (res) => {
+        let body = "";
+        res.on("data", (chunk) => (body += chunk));
+        res.on("end", () => {
+          try {
+            resolve(JSON.parse(body));
+          } catch (e) {
+            reject(new Error("Failed to parse user list"));
+          }
+        });
+      });
+      req.on("error", reject);
+      req.on("timeout", () => {
+        req.destroy();
+        reject(new Error("User discovery timeout"));
+      });
+    });
+
+    if (data && typeof data === "object") {
+      const uids = Object.keys(data);
+      for (const uid of uids) {
+        if (!knownUsers.has(uid)) {
+          knownUsers.add(uid);
+          console.log(`👤 Discovered user: ${uid}`);
+        }
+      }
+    }
+  } catch (err) {
+    console.error("❌ User discovery error:", err.message);
+  }
+}
 
 /**
  * Send an FCM push notification for a doorbell press.
@@ -65,7 +122,7 @@ async function sendDoorbellNotification(uid, eventTimestamp) {
     const fcmToken = tokenSnapshot.val();
 
     if (!fcmToken) {
-      console.log(`⏩ No FCM token for user ${uid} — skipping notification`);
+      console.log(`⏩ No FCM token for ${uid} — skipped`);
       return;
     }
 
@@ -93,17 +150,18 @@ async function sendDoorbellNotification(uid, eventTimestamp) {
     };
 
     const response = await admin.messaging().send(payload);
-    console.log(`✅ FCM sent to user ${uid}:`, response);
+    console.log(`✅ FCM sent to ${uid}:`, response);
   } catch (error) {
-    console.error(`❌ FCM send error for user ${uid}:`, error.message);
+    console.error(`❌ FCM error for ${uid}:`, error.message);
   }
 }
 
 /**
- * Check a single user's doorbell event for changes.
+ * Check ONE user's doorbell event — reads only the tiny event value.
  */
 async function checkUserDoorbellEvent(uid) {
   try {
+    // TARGETED read — only reads /users/{uid}/doorbell/event (a single number)
     const snapshot = await admin
       .database()
       .ref(`users/${uid}/doorbell/event`)
@@ -114,44 +172,56 @@ async function checkUserDoorbellEvent(uid) {
 
     const previous = lastEventTimestamps[uid];
 
-    // First time seeing this user — initialize, don't send notification
     if (previous === undefined) {
       lastEventTimestamps[uid] = eventTimestamp;
-      console.log(`📌 Initialized timestamp for user ${uid}: ${eventTimestamp}`);
+      console.log(`📌 Init timestamp ${uid}: ${eventTimestamp}`);
       return;
     }
 
-    // Only fire on NEW timestamps (different AND greater)
     if (eventTimestamp !== previous && eventTimestamp > previous) {
       lastEventTimestamps[uid] = eventTimestamp;
-      console.log(`🔔 New doorbell event for user ${uid}: ${eventTimestamp}`);
+      console.log(`🔔 Doorbell! User ${uid}: ${eventTimestamp}`);
       sendDoorbellNotification(uid, eventTimestamp);
     }
   } catch (error) {
-    console.error(`❌ Error checking doorbell for user ${uid}:`, error.message);
+    console.error(`❌ Poll error ${uid}:`, error.message);
   }
 }
 
 /**
- * Discover all users and check their doorbell events.
- * Runs on a fixed interval (polling).
+ * Main poll cycle — lightweight targeted reads only.
  */
+let isPolling = false;
+
 async function pollDoorbellEvents() {
-  if (!firebaseReady) return;
+  if (!firebaseReady || isPolling) return;
+  isPolling = true;
 
   try {
-    // Get all user UIDs
-    const usersSnapshot = await admin.database().ref("users").once("value");
-    const usersData = usersSnapshot.val();
+    const now = Date.now();
 
-    if (!usersData) return;
+    // Discover users every 5 minutes (or on first run)
+    if (knownUsers.size === 0 || now - lastUserDiscovery > 300000) {
+      await discoverUsers();
+      lastUserDiscovery = now;
+    }
 
-    const uids = Object.keys(usersData);
+    // Poll each user's doorbell event (tiny reads)
+    for (const uid of knownUsers) {
+      await checkUserDoorbellEvent(uid);
+    }
 
-    // Check each user's doorbell event
-    await Promise.all(uids.map((uid) => checkUserDoorbellEvent(uid)));
+    // Heartbeat log every 100 polls (~5 minutes at 3s interval)
+    pollCount++;
+    if (pollCount % 100 === 0) {
+      console.log(
+        `💓 Heartbeat: ${pollCount} polls | ${knownUsers.size} users tracked`
+      );
+    }
   } catch (error) {
-    console.error("❌ Poll error:", error.message);
+    console.error("❌ Poll cycle error:", error.message);
+  } finally {
+    isPolling = false;
   }
 }
 
@@ -164,18 +234,12 @@ function startPolling() {
     return;
   }
 
-  console.log(
-    `🚀 Doorbell polling started — checking every ${POLL_INTERVAL}ms`
-  );
-
-  // Do an initial poll immediately
+  console.log(`🚀 Doorbell polling started (every 3s)`);
   pollDoorbellEvents();
-
-  // Then poll at the configured interval
-  setInterval(pollDoorbellEvents, POLL_INTERVAL);
+  setInterval(pollDoorbellEvents, 3000);
 }
 
-// ─── Relay Server Routes (existing — unchanged) ───────────────────────────────
+// ─── Relay Server Routes (unchanged) ──────────────────────────────────────────
 
 const frames = {};
 
@@ -219,9 +283,8 @@ app.get("/latest", auth, (req, res) => {
 
 app.get("/", (req, res) => {
   const userCount = Object.keys(frames).length;
-  const trackedUsers = Object.keys(lastEventTimestamps).length;
   res.send(
-    `DoorBot Relay Server | Users: ${userCount} | Tracked: ${trackedUsers} | Firebase: ${firebaseReady ? "yes" : "no"} | Secured: ${API_KEY ? "yes" : "no"}`
+    `DoorBot Relay | Frames: ${userCount} | Users: ${knownUsers.size} | Polls: ${pollCount} | Firebase: ${firebaseReady ? "yes" : "no"}`
   );
 });
 
