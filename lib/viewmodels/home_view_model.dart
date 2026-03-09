@@ -39,8 +39,8 @@ class HomeViewModel extends ChangeNotifier {
   }
 
   void _startPolling() {
-    debugPrint('🚀 Frame polling started (every 300ms)');
-    _frameTimer = Timer.periodic(const Duration(milliseconds: 300), (_) {
+    debugPrint('🚀 Frame polling started (every 150ms)');
+    _frameTimer = Timer.periodic(const Duration(milliseconds: 150), (_) {
       _fetchLatestFrame();
     });
   }
@@ -84,7 +84,7 @@ class HomeViewModel extends ChangeNotifier {
               'Pragma': 'no-cache',
             },
           )
-          .timeout(const Duration(seconds: 5));
+          .timeout(const Duration(seconds: 2));
 
       if (response.statusCode == 200 && response.bodyBytes.isNotEmpty) {
         _currentFrame = response.bodyBytes;
